@@ -5,4 +5,18 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Cloud.Firestore" Version="2.3.0" />
+  </ItemGroup>
+
 </Project>

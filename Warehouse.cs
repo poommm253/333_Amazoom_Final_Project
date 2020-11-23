@@ -20,6 +20,7 @@ namespace AmazoomDebug
         public static int RobotCapacity { get; set; } 
         public static int Shelves { get; set; }
         public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
+        public static List<Products> allProducts { get; set; } = new List<Products>();
 
         private List<Coordinate> IsEmpty = new List<Coordinate>();
         private List<Coordinate> IsStored = new List<Coordinate>();
