@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30104.148
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmazoomDebug", "AmazoomDebug.csproj", "{5553443D-8694-4FB1-9285-CCFDF4F56479}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5553443D-8694-4FB1-9285-CCFDF4F56479}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5553443D-8694-4FB1-9285-CCFDF4F56479}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5553443D-8694-4FB1-9285-CCFDF4F56479}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5553443D-8694-4FB1-9285-CCFDF4F56479}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {09B98D5C-1830-4651-AC77-08154D5E4207}
+	EndGlobalSection
+EndGlobal
