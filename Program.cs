@@ -14,6 +14,7 @@ namespace AmazoomDebug
 
             // initializes the warehouse
             Warehouse testWarehouse = new Warehouse();
+            testWarehouse.Deploy();
 
             List<Jobs> testJob = new List<Jobs>() { new Jobs(new Products("soap", "sp1", new Coordinate(1, 1), 2.5, 0.5, 1), "order1", false, true), new Jobs(new Products("book", "bk1", new Coordinate(3, 1), 2.5, 0.5, 1), "order1", false, true) };
             Jobs additional = new Jobs(new Products("soap", "sp1", new Coordinate(5, 1), 4, 0.5, 1), "order1", false, true);

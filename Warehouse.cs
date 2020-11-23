@@ -55,9 +55,24 @@ namespace AmazoomDebug
                 setup.Close();
                 Console.WriteLine("File not loaded properly and warehouse cannot be instantiated");
             }
+        }
 
+        public void Deploy()
+        {
             GenerateLayout();
             InstantiateRobots();
+
+            // Deploying robots
+            Task[] robots = new Task[Columns];
+            for (int i = 0; i < Columns; i++)
+            {
+                robots[i] = Task.Run(() => operationalRobots[i].Deploy());
+            }
+
+            // Add tasks to robots somehow
+
+            // Await for all tasks to finish executing
+            Task.WaitAll(robots);
         }
 
         private void GenerateLayout()
@@ -95,14 +110,6 @@ namespace AmazoomDebug
             for (int i = 1; i <= Columns; i++)
             {
                 operationalRobots.Add(new Robot("AMAZOOM_AW_" + i.ToString(), new Battery(100), new Coordinate(0, i)));
-            }
-
-            Task[] robots = new Task[Columns];
-
-            // Deploying robots
-            for (int i = 0; i < Columns; i++)
-            {
-                robots[i] = Task.Run(() => operationalRobots[i].Deploy());
             }
         }
         public static void AddToTruck(Jobs toTruck)
