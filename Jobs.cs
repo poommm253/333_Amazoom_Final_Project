@@ -11,6 +11,7 @@ namespace AmazoomDebug
         public bool Restock { get; set; }
         public bool Retrieve { get; set; }
         public Coordinate RestockCoord { get; set; }
+        public Coordinate RetrieveCoord { get; set; }
 
         public Jobs()
         {

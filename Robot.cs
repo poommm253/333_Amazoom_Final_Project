@@ -81,7 +81,7 @@ namespace AmazoomDebug
                 }
                 else if (carryingCapacity - currentJob.ProdId.Weight >= 0)
                 {
-                    Movement(path.Item2.ProdId.Location.Row);
+                    Movement(path.Item2.RetrieveCoord.Row);
                     carryingCapacity -= path.Item2.ProdId.Weight;
 
                     CarryingItem.Add(path.Item2);
@@ -199,7 +199,7 @@ namespace AmazoomDebug
 
             foreach (var toRetrieve in allJobs)
             {
-                int destination = Math.Abs(toRetrieve.ProdId.Location.Row - Sector.Row);
+                int destination = Math.Abs(toRetrieve.RetrieveCoord.Row - Sector.Row);
 
                 if (destination <= closestPath)
                 {

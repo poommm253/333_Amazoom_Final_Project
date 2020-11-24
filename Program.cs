@@ -12,19 +12,18 @@ namespace AmazoomDebug
 {
     class Program
     {
-        private static FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
         static void Main()
         {
             // initializes the warehouse
-            //Warehouse testWarehouse = new Warehouse();
-            //testWarehouse.Deploy();
+            Warehouse testWarehouse = new Warehouse();
+            testWarehouse.Deploy();
 
             // Initializing Cloud Firestore
-            string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
-            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
+            
 
             // Fetch all product data from Cloud Firestore
-            FetchData().Wait();
+            //FetchData().Wait();
+            //AddProductToFirebase().Wait();
 
 
 
@@ -54,7 +53,7 @@ namespace AmazoomDebug
         /// Fetch data from "All products" collection on Cloud Firestore
         /// </summary>
         /// <returns> it is an asynchronous method that wait for the fetching operation to complete before continueuing</returns>
-        static async Task FetchData()
+        /*static async Task FetchData()
         {
             try
             {
@@ -65,15 +64,17 @@ namespace AmazoomDebug
                 {
                     Dictionary<string, Object> prodDetail = productInfo.ToDictionary();
 
+                    // Creating Product object for all of the documents on Cloud Firestore
                     Warehouse.allProducts.Add(new Products(
-                        prodDetail["name"].ToString(), 
-                        productInfo.Id, 
-                        new Coordinate(1, 2, 3),    // TODO: Randomize distribute and storage, might need to move this class into the Warehouse class
-                        Convert.ToInt32(prodDetail["weight"]), 
-                        Convert.ToInt32(prodDetail["volume"]), 
-                        Convert.ToInt32(prodDetail["inStock"])));
+                        prodDetail["name"].ToString(),
+                        productInfo.Id,     // TODO: Randomize distribute and storage, might need to move this class into the Warehouse class
+                        Convert.ToDouble(prodDetail["weight"]),
+                        Convert.ToDouble(prodDetail["volume"]),
+                        Convert.ToInt32(prodDetail["inStock"]),
+                        Convert.ToDouble(prodDetail["price"])));
                 }
-                foreach(var element in Warehouse.allProducts)
+
+                foreach (var element in Warehouse.allProducts)
                 {
                     Console.WriteLine(element.ProductID);
                 }
@@ -82,6 +83,44 @@ namespace AmazoomDebug
             {
                 Console.WriteLine(error);
             }
-        }
+        }*/
+
+        /*static async Task AddProductToFirebase()
+        {
+            try
+            {
+                List<Products> newProducts = new List<Products>()
+                {
+                    new Products("TV", "1", 12.0, 0.373, 40, 5999.0),
+                    new Products("Sofa", "2", 30.0, 1.293, 40, 1250.0),
+                    new Products("Book", "3",0.2, 0.005, 40, 12.0),
+                    new Products("Desk", "4", 22.1, 1.1, 40, 70.0),
+                    new Products("Phone", "5", 0.6, 0.001, 40, 1299.0),
+                    new Products("Bed", "6", 15, 0.73, 40, 199.0),
+                };
+                CollectionReference addingProd = database.Collection("All products");
+
+                // Randomize Storage
+
+
+                foreach (var prod in newProducts)
+                {
+                    Dictionary<string, Object> conversion = new Dictionary<string, object>();
+                    conversion.Add("coordinate", prod.CoordToArray());
+                    conversion.Add("inStock", prod.InStock);
+                    conversion.Add("name", prod.ProductName);
+                    conversion.Add("price", prod.Price);
+                    conversion.Add("volume", prod.Volume);
+                    conversion.Add("weight", prod.Weight);
+
+                    await addingProd.AddAsync(conversion);
+                }
+
+            }
+            catch (Exception error)
+            {
+                Console.WriteLine(error);
+            }
+        }*/
     }
 }
