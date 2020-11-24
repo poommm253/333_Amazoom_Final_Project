@@ -14,7 +14,7 @@ namespace AmazoomDebug
         public double Price { get; set; }
 
 
-        public Products(string name, string id, List<Coordinate> pos, double weight, double volume, int inStock)
+        public Products(string name, string id, List<Coordinate> pos, double weight, double volume, int inStock, double price)
         {
             ProductName = name;
             ProductID = id;
@@ -22,6 +22,7 @@ namespace AmazoomDebug
             Weight = weight;
             Volume = volume;
             InStock = inStock;
+            Price = price;
         }
 
         public Products(string name, string id, double weight, double volume, int inStock, double price)
@@ -34,12 +35,25 @@ namespace AmazoomDebug
             Price = price;
         }
 
-        public List<Dictionary<string, int>> CoordToArray()
+        public List<string> CoordToArray()
+        {
+            List<string> toArray = new List<string>();
+
+            foreach (var coord in Location)
+            {
+                string temp = coord.Row + " " + coord.Column + " " + coord.Shelf;
+
+                toArray.Add(temp);
+            }
+
+            return toArray;
+        }
+
+        /*public List<Dictionary<string, int>> CoordToArray()
         {
             List<Dictionary<string, int>> toArray = new List<Dictionary<string, int>>();
-            
 
-            foreach(var coord in Location)
+            foreach (var coord in Location)
             {
                 Dictionary<string, int> temp = new Dictionary<string, int>();
                 temp["Row"] = coord.Row;
@@ -48,9 +62,9 @@ namespace AmazoomDebug
 
                 toArray.Add(temp);
             }
-            
+
             return toArray;
-        }
+        }*/
 
     }
 }

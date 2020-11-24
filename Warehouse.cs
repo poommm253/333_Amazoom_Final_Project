@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
+using System.Linq;
 
 namespace AmazoomDebug
 {
@@ -70,6 +71,7 @@ namespace AmazoomDebug
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
 
             FetchData(database).Wait();
+
             // Deploying robots
             /*Task[] robots = new Task[Columns];
             for (int i = 0; i < Columns; i++)
@@ -81,6 +83,9 @@ namespace AmazoomDebug
 
             // Await for all tasks to finish executing
             //Task.WaitAll(robots);
+
+
+
         }
 
         private void GenerateLayout()
@@ -117,15 +122,28 @@ namespace AmazoomDebug
 
                 if (fetchedData.Count != 0)
                 {
-                    foreach(DocumentSnapshot productInfo in fetchedData)
+                    foreach(DocumentSnapshot productInfo in fetchedData.Documents)
                     {
                         Dictionary<string, Object> prodDetail = productInfo.ToDictionary();
 
+                        List<Coordinate> assignCoord = new List<Coordinate>();
+
+                        int stock = 0;
+                        for (int i = 0; i< Convert.ToInt32(prodDetail["inStock"]); i++)
+                        {
+                            string key = "coordinate" + stock;
+                            string[] assign = prodDetail[key].ToString().Split();
+
+                            Coordinate add = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
+
+                            assignCoord.Add(add);
+                        }
+                        
                         // Creating Product object for all of the documents on Cloud Firestore
                         Warehouse.allProducts.Add(new Products(
                             prodDetail["name"].ToString(),
                             productInfo.Id,     
-                                                                   // TODO: Randomize distribute and storage, might need to move this class into the Warehouse class
+                            assignCoord,
                             Convert.ToDouble(prodDetail["weight"]),
                             Convert.ToDouble(prodDetail["volume"]),
                             Convert.ToInt32(prodDetail["inStock"]),
@@ -134,7 +152,7 @@ namespace AmazoomDebug
 
                     foreach(var element in Warehouse.allProducts)
                     {
-                        Console.WriteLine(element.ProductID);
+                        Console.WriteLine(element.Location[0].Column);
                     }
                 }
                 else
@@ -155,7 +173,7 @@ namespace AmazoomDebug
             {
                 new Products("TV", "1", 12.0, 0.373, 40, 5999.0),
                 new Products("Sofa", "2", 30.0, 1.293, 40, 1250.0),
-                new Products("Book", "3",0.2, 0.005, 40, 12.0),
+                new Products("Book", "3", 0.2, 0.005, 40, 12.0),
                 new Products("Desk", "4", 22.1, 1.1, 40, 70.0),
                 new Products("Phone", "5", 0.6, 0.001, 40, 1299.0),
                 new Products("Bed", "6", 15, 0.73, 40, 199.0),
@@ -191,7 +209,19 @@ namespace AmazoomDebug
                 foreach (var prod in initialProducts)
                 {
                     Dictionary<string, Object> conversion = new Dictionary<string, object>();
-                    conversion.Add("coordinate", prod.CoordToArray());
+
+
+                    List<string> coordConversion = prod.CoordToArray();
+
+                    int stock = 0;
+                    foreach (var c in coordConversion)
+                    {
+                        string key = "coordinate" + stock;
+                        conversion.Add(key, c);
+                        stock++;
+                    }
+                    
+                    //conversion.Add("coordinate", prod.CoordToArray());
                     conversion.Add("inStock", prod.InStock);
                     conversion.Add("name", prod.ProductName);
                     conversion.Add("price", prod.Price);
