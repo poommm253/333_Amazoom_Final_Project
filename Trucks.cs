@@ -6,5 +6,7 @@ namespace AmazoomDebug
 {
     class Trucks
     {
+        public string TruckId { get; set; }
+
     }
 }

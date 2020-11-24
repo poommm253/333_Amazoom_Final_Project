@@ -1,9 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Diagnostics;
-using System.IO;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
 using System.Linq;
@@ -24,9 +21,10 @@ namespace AmazoomDebug
         public static int Shelves { get; set; }
         public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
         public static List<Products> allProducts { get; set; } = new List<Products>();
+        public static List<Jobs> IncomingOrders { get; set; } = new List<Jobs>();
 
-        private static Queue<Coordinate> isEmpty = new Queue<Coordinate>();    // TODO: Change to Stack class or Queue class
-        private static Queue<Coordinate> isOccupied = new Queue<Coordinate>();
+        private static List<Coordinate> isEmpty = new List<Coordinate>();    // TODO: Change to Stack class or Queue class
+        private static List<Coordinate> isOccupied = new List<Coordinate>();
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
         private static List<Robot> operationalRobots = new List<Robot>();
 
@@ -79,13 +77,10 @@ namespace AmazoomDebug
                 robots[i] = Task.Run(() => operationalRobots[i].Deploy());
             }*/
 
-            // Add tasks to robots somehow
+            // Add tasks to robots somehow while (true)
 
-            // Await for all tasks to finish executing
+            // Continuos check for incoming updates and order
             //Task.WaitAll(robots);
-
-
-
         }
 
         private void GenerateLayout()
@@ -125,19 +120,31 @@ namespace AmazoomDebug
                     foreach(DocumentSnapshot productInfo in fetchedData.Documents)
                     {
                         Dictionary<string, Object> prodDetail = productInfo.ToDictionary();
-
+                        
                         List<Coordinate> assignCoord = new List<Coordinate>();
+                        List<Object> test = (List<Object>) prodDetail["coordinate"];
 
-                        int stock = 0;
+                        foreach(var item in test)
+                        {
+                            string[] assign = item.ToString().Split(" ");
+
+                            // Row, Column, Shelf
+                            Coordinate fetched = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
+                            assignCoord.Add(fetched);
+                        }
+
+                        // pharsing the coordinate and creating a list of Coordinate classes from Cloud Firestore
+                        /*int stock = 0;
                         for (int i = 0; i< Convert.ToInt32(prodDetail["inStock"]); i++)
                         {
                             string key = "coordinate" + stock;
                             string[] assign = prodDetail[key].ToString().Split();
 
+                            // Row, Column
                             Coordinate add = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
 
                             assignCoord.Add(add);
-                        }
+                        }*/
                         
                         // Creating Product object for all of the documents on Cloud Firestore
                         Warehouse.allProducts.Add(new Products(
@@ -150,14 +157,14 @@ namespace AmazoomDebug
                             Convert.ToDouble(prodDetail["price"])));
                     }
 
-                    foreach(var element in Warehouse.allProducts)
+                    foreach (var element in Warehouse.allProducts)
                     {
                         Console.WriteLine(element.Location[0].Column);
                     }
                 }
                 else
                 {
-                    InitialCoordinateRandomizer(database);
+                    InitialCoordinateRandomizer(database);    // If and only if the warehouse is initially empty, restock with random distribution
                 }
             }
             catch (Exception error)
@@ -185,7 +192,7 @@ namespace AmazoomDebug
             for (int i = 0; i < totalIndex; i++)
             {
                 int currentIndex = indexRandomizer.Next(totalIndex);
-                isEmpty.Enqueue(accessibleLocations[currentIndex]);
+                isEmpty.Add(accessibleLocations[currentIndex]);
             }
 
             // Assigning Products to a random coordinate and update to Cloud Firestore
@@ -193,8 +200,9 @@ namespace AmazoomDebug
             {
                 for (int i = 1; i <= element.InStock; i++)
                 {
-                    element.Location.Add(isEmpty.Peek());
-                    isOccupied.Enqueue(isEmpty.Dequeue());
+                    element.Location.Add(isEmpty[0]);
+                    isOccupied.Add(isEmpty[0]);    // Once assigned to a Coordinate, toggle to isOccupied
+                    isEmpty.RemoveAt(0);           // Remove the spot in isEmpty
                 }
             }
             AddProductToFirebase(database, newProducts).Wait();
@@ -210,8 +218,9 @@ namespace AmazoomDebug
                 {
                     Dictionary<string, Object> conversion = new Dictionary<string, object>();
 
-
-                    List<string> coordConversion = prod.CoordToArray();
+                    //Dictionary<string, string> test =(Dictionary<string,string>)conversion["coordinate"];
+                    
+                    /*List<string> coordConversion = prod.CoordToArray();
 
                     int stock = 0;
                     foreach (var c in coordConversion)
@@ -219,9 +228,9 @@ namespace AmazoomDebug
                         string key = "coordinate" + stock;
                         conversion.Add(key, c);
                         stock++;
-                    }
+                    }*/
                     
-                    //conversion.Add("coordinate", prod.CoordToArray());
+                    conversion.Add("coordinate", prod.CoordToArray());
                     conversion.Add("inStock", prod.InStock);
                     conversion.Add("name", prod.ProductName);
                     conversion.Add("price", prod.Price);
@@ -237,14 +246,21 @@ namespace AmazoomDebug
             }
         }
 
+        private async Task OrderListener(FirestoreDb database)
+        {
+            Query incomingOrders = database.Collection("User Orders");
+            FirestoreChangeListener notifier = incomingOrders.Listen(orders =>
+            {
+                Console.WriteLine("New order received");
+                foreach(DocumentChange newOrders in orders.Changes)
+                {
+                    // Create Jobs
+                }
+            });
+        }
         public static void AddToTruck(Jobs toTruck)
         {
             LoadedToTruck.Add(toTruck);
-        }
-
-        public static void RandomDistribution()
-        {
-            
         }
 
         public static void LoadingTruckVerification()

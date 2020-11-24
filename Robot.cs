@@ -41,11 +41,15 @@ namespace AmazoomDebug
                 {
                     // TODO: need to further check if the job is a retrieve or a restock
                     Retrieve();
+
+
+                    // TODO: Update Location onto Firebase
                 }
                 else
                 {
                     Thread.Sleep(2000);    // wait 2 seconds to recheck for jobs
                     Console.WriteLine("Waiting for more jobs");
+                    
                 }
             }
         }
