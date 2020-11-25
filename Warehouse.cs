@@ -3,8 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
-using System.Linq;
-using System.Threading;
 
 namespace AmazoomDebug
 {
@@ -18,6 +16,8 @@ namespace AmazoomDebug
         public static int Columns { get; set; }
         public static int TravelTime { get; set; }
         public static int RobotCapacity { get; set; } 
+        public static int TruckCapacityVol { get; set; }
+        public static int TruckCapacityWeight { get; set; }
         public static int Shelves { get; set; }
         public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
         public static List<Products> AllProducts { get; set; } = new List<Products>();
@@ -48,6 +48,8 @@ namespace AmazoomDebug
                 RobotCapacity = Int32.Parse(keys[3]);
                 TravelTime = Int32.Parse(keys[4]);
                 LoadingDockRow = Rows + 1;
+                TruckCapacityVol = Int32.Parse(keys[5]);
+                TruckCapacityWeight = Int32.Parse(keys[6]);
 
                 setup.Close();
             }
@@ -81,14 +83,20 @@ namespace AmazoomDebug
                 index++;
             }
 
-            // Add tasks to robots somehow while (true)
+            // Deploying shipping and invertory trucks
 
 
-            // Check for incoming order in the background and assign jobs to the robots all in the background
+
+            // Check for incoming order in the background and assign jobs to the robots all in the background and adding tasks to the robot
             Task orderCheck = Task.Run(() => OrderListener(database));
 
-            // Continuos check for incoming updates and order
-            //Task.WaitAll(robots);
+
+            // Check for truck loading and unloading from the shipping and inventory trucks
+
+
+
+            // Wait all
+            Task.WaitAll(robots);
             orderCheck.Wait();
         }
 

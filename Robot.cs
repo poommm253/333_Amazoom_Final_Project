@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
@@ -45,8 +41,8 @@ namespace AmazoomDebug
                     // TODO: need to further check if the job is a retrieve or a restock
                     Retrieve();
 
-
                     // TODO: Update Location onto Firebase
+
                 }
                 else
                 {
