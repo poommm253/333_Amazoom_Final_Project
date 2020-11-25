@@ -5,6 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using Google.Cloud.Firestore;
 
 namespace AmazoomDebug
 {
@@ -163,24 +165,26 @@ namespace AmazoomDebug
 
             while (Sector.Row != productLocation)
             {
-                // now that I got the closest path, I move the robot from its current position to productLocation
-                if (Sector.Row <= productLocation)    // move down the row
+                if (Sector.Row <= productLocation)    // Move down the row
                 {
                     totalUnitMovement++;
                     Sector.Row++;
-                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column + " going to " + productLocation.ToString());
-                    Thread.Sleep(Warehouse.TravelTime);    // travel time
+                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column);
+                    UpdatePositionDB().Wait();
 
+                    Thread.Sleep(Warehouse.TravelTime);    // Simulated travel time
                 }
-                else                                  // move up the row
+                else                                  // Move up the row
                 {
                     totalUnitMovement++;
                     Sector.Row--;
-                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column + " going to " + productLocation.ToString());
-                    Thread.Sleep(Warehouse.TravelTime);    // travel time
+                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column);
+                    UpdatePositionDB().Wait();
+
+                    Thread.Sleep(Warehouse.TravelTime);    // Simulated travel time
                 }
 
-                if (totalUnitMovement % 6 == 0)    // 6 == battery life
+                if (totalUnitMovement % 3 == 0)    // 3 == battery life -10%
                 {
                     if (!Battery.Usage())    // check if battery is 10% then return to charging dock
                     {
@@ -189,6 +193,20 @@ namespace AmazoomDebug
                     }
                 }
             }
+        }
+
+        private async Task UpdatePositionDB()
+        {
+            string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
+            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
+            FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
+
+            DocumentReference updatePos = database.Collection("All robot").Document(RobotId);
+            Dictionary<string, Object> update = new Dictionary<string, Object>();
+            string currentPos = Sector.Row + " " + Sector.Column + " " + Sector.Shelf;
+            update.Add("coordinate", currentPos);
+
+            await updatePos.UpdateAsync(update);    // Sending coordinate updates to Cloud Firestore
         }
 
         /// <summary>

@@ -62,7 +62,6 @@ namespace AmazoomDebug
         {
             // Initialization of Automated Warehouse
             GenerateLayout();
-            
 
             string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
             Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
