@@ -48,7 +48,16 @@ namespace AmazoomDebug
                 {
                     Thread.Sleep(2000);    // wait 2 seconds to recheck for jobs
                     Console.WriteLine("Waiting for more jobs");
-                    
+
+                    // Try to go back and recharge, break the movement loop if a new job has been added
+
+                    /*else    // return to charging dock for idle
+                    {
+                        Movement(0);
+                        Battery.Charge();
+                    }*/
+
+
                 }
             }
         }
@@ -79,7 +88,6 @@ namespace AmazoomDebug
             {
                 if (carryingCapacity < Warehouse.RobotCapacity && toLoadingDock < path.Item1)
                 {
-                    // TODO: Maybe picking up items based on same orderId first
                     AvoidCollisionLoading();
                 }
                 else if (carryingCapacity - currentJob.ProdId.Weight >= 0)
@@ -101,13 +109,7 @@ namespace AmazoomDebug
                 {
                     AvoidCollisionLoading();
                 }
-                /*else    // return to charging dock for idle
-                {
-                    Movement(0);
-                    Battery.Charge();
-                }*/
             }
-            
         }
 
         /// <summary>
@@ -191,6 +193,10 @@ namespace AmazoomDebug
             }
         }
 
+        /// <summary>
+        /// Update robot's current position real time to the Cloud Firestore
+        /// </summary>
+        /// <returns> It is an asynchronous task that must be waited once called </returns>
         private async Task UpdatePositionDB()
         {
             string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
@@ -231,5 +237,4 @@ namespace AmazoomDebug
         }
         
     }
-    
 }

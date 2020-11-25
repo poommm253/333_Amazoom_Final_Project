@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
+using Newtonsoft.Json.Schema;
 
 namespace AmazoomDebug
 {
@@ -22,11 +23,14 @@ namespace AmazoomDebug
         public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
         public static List<Products> AllProducts { get; set; } = new List<Products>();
         public static List<Jobs> AllJobs { get; set; } = new List<Jobs>();
+        public static List<Orders> LocalOrders { get; set; } = new List<Orders>();
 
-        private static List<Coordinate> isEmpty = new List<Coordinate>();    // TODO: Change to Stack class or Queue class
+        private static List<Coordinate> isEmpty = new List<Coordinate>();
         private static List<Coordinate> isOccupied = new List<Coordinate>();
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
         private static List<Robot> operationalRobots = new List<Robot>();
+        private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
+        private static List<InventoryTruck> operationalInventoryTrucks = new List<InventoryTruck>();
 
         /// <summary>
         /// reads setup file and initializes the warehouse with all the primary global constants
@@ -74,29 +78,42 @@ namespace AmazoomDebug
             FetchData(database).Wait();
 
             // Deploying robots
-            Task[] robots = new Task[Columns];
+            Task[] robots = new Task[operationalRobots.Count];
 
             int index = 0;
-            foreach(Robot opRobot in operationalRobots)
+            foreach(var opRobot in operationalRobots)
             {
                 robots[index] = Task.Run(() => opRobot.Deploy());
                 index++;
             }
 
             // Deploying shipping and invertory trucks
+            Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
+            Task[] inventoryTruck = new Task[operationalShippingTrucks.Count];
 
-
+            int tIndex = 0;
+            int sIndex = 0;
+            foreach (var opShipTruck in operationalShippingTrucks)
+            {
+                shippingTrucks[sIndex] = Task.Run(() => opShipTruck.Deploy());
+                sIndex++;
+            }
+            foreach (var opInvTruck in operationalInventoryTrucks)
+            {
+                inventoryTruck[tIndex] = Task.Run(() => opInvTruck.Deploy());
+                tIndex++;
+            }
 
             // Check for incoming order in the background and assign jobs to the robots all in the background and adding tasks to the robot
             Task orderCheck = Task.Run(() => OrderListener(database));
-
-
+            
             // Check for truck loading and unloading from the shipping and inventory trucks
-
 
 
             // Wait all
             Task.WaitAll(robots);
+            Task.WaitAll(shippingTrucks);
+            Task.WaitAll(inventoryTruck);
             orderCheck.Wait();
         }
 
@@ -185,6 +202,8 @@ namespace AmazoomDebug
                             // Row, Column, Shelf
                             Coordinate fetched = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
                             assignCoord.Add(fetched);
+
+                            isOccupied.Add(fetched);
                         }
 
                         // pharsing the coordinate and creating a list of Coordinate classes from Cloud Firestore
@@ -201,7 +220,7 @@ namespace AmazoomDebug
                         }*/
                         
                         // Creating Product object for all of the documents on Cloud Firestore
-                        Warehouse.AllProducts.Add(new Products(
+                        AllProducts.Add(new Products(
                             prodDetail["name"].ToString(),
                             productInfo.Id,     
                             assignCoord,
@@ -209,10 +228,25 @@ namespace AmazoomDebug
                             Convert.ToDouble(prodDetail["volume"]),
                             Convert.ToInt32(prodDetail["inStock"]),
                             Convert.ToDouble(prodDetail["price"])));
+
                     }
+
+                    // Initializing the List isEmpty and isOccupied
+                    foreach(var emptyShelf in accessibleLocations)
+                    {
+                        if (isOccupied.Contains(emptyShelf))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            isEmpty.Add(emptyShelf);
+                        }
+                    }
+
                     Console.WriteLine("Products fetched sucessfully.");
 
-                    foreach (var element in Warehouse.AllProducts)
+                    foreach (var element in AllProducts)
                     {
                         Console.WriteLine(element.ProductID + " " + element.Location[0].Row + element.Location[0].Column + element.Location[0].Shelf);
                     }
@@ -315,10 +349,10 @@ namespace AmazoomDebug
                     Dictionary<string, Object> newOrderDetail = newOrders.Document.ToDictionary();
 
                     List<Object> prodInOrder = (List<Object>)newOrderDetail["Items"];
+                    List<Products> tempProd = new List<Products>();
 
-                    // Create Jobs
+                    // Create Jobs and Store a copy of Orders locally
                     //Console.WriteLine("Creating jobs...");
-
                     foreach(var prod in prodInOrder)
                     {
                         // search id for the corresponding Product
@@ -327,17 +361,36 @@ namespace AmazoomDebug
                             if (prod.ToString() == item.ProductID)
                             {
                                 Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
+                                tempProd.Add(item);
 
-                                Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
+                                //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
+                                
+                                
+
+
+                                // TODO: Might move to when robot loaded products onto the trucks
                                 // Updating product remaining coordinates
                                 isEmpty.Add(item.Location[0]);
                                 isOccupied.Remove(item.Location[0]);
                                 item.Location.RemoveAt(0);
 
-                                Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
+
+
+
+
+                                //Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
 
                                 AllJobs.Add(newJob);
-                                Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
+                                //Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
+
+                                // Instantiating orders locally
+                                LocalOrders.Add(new Orders(
+                                    newOrders.Document.Id,
+                                    tempProd,
+                                    newOrderDetail["user"].ToString(),
+                                    Convert.ToBoolean(newOrderDetail["isShipped"])
+                                    ));
+
                                 break;
                             }
                         }
@@ -363,7 +416,6 @@ namespace AmazoomDebug
             });
 
             notifier.ListenerTask.Wait();
-            
         }
 
         public static void AddToTruck(Jobs toTruck)
@@ -371,9 +423,13 @@ namespace AmazoomDebug
             LoadedToTruck.Add(toTruck);
         }
 
+        /// <summary>
+        /// Perform all final checks before shipping; truck weight and volume limitation; toggling Order status if all Products from that order is loaded
+        /// </summary>
         public static void LoadingTruckVerification()
         {
-
+            // check order id from the job and stores it and count the number of products in that order
+                
         }
     }
 }
