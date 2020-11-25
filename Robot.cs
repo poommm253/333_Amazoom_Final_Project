@@ -17,7 +17,7 @@ namespace AmazoomDebug
         public Battery Battery { get; set; }
         public string RobotId { get; set; }
         public Coordinate Sector { get; set; }
-        public List<Jobs> JobQueue { get; set; } = new List<Jobs>();
+        public List<Jobs> JobList { get; set; } = new List<Jobs>();
         public List<Jobs> CarryingItem { get; set; } = new List<Jobs>();
 
         public Robot(string id, Battery battery, Coordinate sector)
@@ -30,14 +30,15 @@ namespace AmazoomDebug
 
         public void AddJob(Jobs add)
         {
-            JobQueue.Add(add);
+            Console.WriteLine("Robot: " + Sector.Column + " received new job.");
+            JobList.Add(add);
         }
 
         public void Deploy()
         {
             while (true)
             {
-                if (JobQueue.Count != 0)
+                if (JobList.Count != 0)
                 {
                     // TODO: need to further check if the job is a retrieve or a restock
                     Retrieve();
@@ -63,7 +64,7 @@ namespace AmazoomDebug
         public void Retrieve()
         {
             // Item1: closestPath; Item2: corresponding Job
-            var path = ShortestPathCalc(JobQueue);
+            var path = ShortestPathCalc(JobList);
             Jobs currentJob = path.Item2;
 
             // check distance from current location to the loading doc if the robot is carrying something
@@ -89,8 +90,8 @@ namespace AmazoomDebug
                     carryingCapacity -= path.Item2.ProdId.Weight;
 
                     CarryingItem.Add(path.Item2);
-                    JobQueue.Remove(path.Item2);    // remove item that is retrieved
-                    Console.WriteLine("Product Retrieved");
+                    JobList.Remove(path.Item2);    // remove item that is retrieved
+                    Console.WriteLine("Product Retrieved: " + path.Item2.ProdId.ProductName + "  " + Sector.Column + "  at  " + path.Item2.RetrieveCoord.Row + path.Item2.RetrieveCoord.Column + path.Item2.RetrieveCoord.Shelf);
                     Console.WriteLine("Carrying Cap: " + carryingCapacity);
                 }
                 else
@@ -98,7 +99,7 @@ namespace AmazoomDebug
                     AvoidCollisionLoading();
                 }
 
-                if (JobQueue.Count == 0 && CarryingItem.Count != 0)    // head straight to shipping if it is the last job
+                if (JobList.Count == 0 && CarryingItem.Count != 0)    // head straight to shipping if it is the last job
                 {
                     AvoidCollisionLoading();
                 }
@@ -167,7 +168,7 @@ namespace AmazoomDebug
                 {
                     totalUnitMovement++;
                     Sector.Row++;
-                    Console.WriteLine("Position: " + Sector.Row);
+                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column + " going to " + productLocation.ToString());
                     Thread.Sleep(Warehouse.TravelTime);    // travel time
 
                 }
@@ -175,7 +176,7 @@ namespace AmazoomDebug
                 {
                     totalUnitMovement++;
                     Sector.Row--;
-                    Console.WriteLine("Position: " + Sector.Row);
+                    Console.WriteLine("Position: " + Sector.Row + " , Robot id: " + Sector.Column + " going to " + productLocation.ToString());
                     Thread.Sleep(Warehouse.TravelTime);    // travel time
                 }
 

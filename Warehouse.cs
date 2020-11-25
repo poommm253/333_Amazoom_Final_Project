@@ -138,14 +138,18 @@ namespace AmazoomDebug
                 {
                     operationalRobots.Add(new Robot("AMAZOOM_AW_" + i.ToString(), new Battery(100), new Coordinate(0, i)));
                 }
+
+                int docId = 1;
                 foreach(var robots in operationalRobots)
                 {
+                    DocumentReference addRobot = database.Collection("All robot").Document("Robot_" + docId.ToString());
                     Dictionary<string, string> initialRobotParams = new Dictionary<string, string>();
 
                     initialRobotParams.Add("battery", "100");
                     initialRobotParams.Add("coordinate", robots.Sector.CoordToString());
 
-                    await allRobot.AddAsync(initialRobotParams);
+                    await addRobot.SetAsync(initialRobotParams);
+                    docId++;
                 }
                 Console.WriteLine("Robot added to database successfully.");
             }
@@ -201,10 +205,10 @@ namespace AmazoomDebug
                     }
                     Console.WriteLine("Products fetched sucessfully.");
 
-/*                    foreach (var element in Warehouse.allProducts)
+                    foreach (var element in Warehouse.AllProducts)
                     {
-                        Console.WriteLine(element.Location[0].Column);
-                    }*/
+                        Console.WriteLine(element.ProductID + " " + element.Location[0].Row + element.Location[0].Column + element.Location[0].Shelf);
+                    }
                 }
                 else
                 {
@@ -317,14 +321,17 @@ namespace AmazoomDebug
                             {
                                 Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
 
+                                Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
                                 // Updating product remaining coordinates
                                 isEmpty.Add(item.Location[0]);
                                 isOccupied.Remove(item.Location[0]);
                                 item.Location.RemoveAt(0);
 
+                                Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
+
                                 AllJobs.Add(newJob);
+                                Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
                                 break;
-                                //Console.WriteLine("New job created successfully.");
                             }
                         }
                     }
@@ -333,8 +340,11 @@ namespace AmazoomDebug
                     // Assigning Jobs to robots by Column
                     foreach(var currentJobs in AllJobs)
                     {
-                        int toAssign = (currentJobs.ProdId.Location[0].Column) - 1;    // calculating product location and the corresponding robot in that columns
+                        Console.WriteLine("job location: " + currentJobs.RetrieveCoord.Row + currentJobs.RetrieveCoord.Column + currentJobs.RetrieveCoord.Shelf);
 
+                        int toAssign = (currentJobs.RetrieveCoord.Column) - 1;    // calculating product location and the corresponding robot in that columns
+
+                        Console.WriteLine("This job is assigned to robot: " + toAssign + " to retrieve " + currentJobs.ProdId.ProductName);
                         operationalRobots[toAssign].AddJob(currentJobs);
 
                         jobsPerformed++;
