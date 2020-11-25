@@ -142,7 +142,7 @@ namespace AmazoomDebug
                 int docId = 1;
                 foreach(var robots in operationalRobots)
                 {
-                    DocumentReference addRobot = database.Collection("All robot").Document("Robot_" + docId.ToString());
+                    DocumentReference addRobot = database.Collection("All robot").Document("AMAZOOM_AW_" + docId.ToString());
                     Dictionary<string, string> initialRobotParams = new Dictionary<string, string>();
 
                     initialRobotParams.Add("battery", "100");
@@ -349,10 +349,6 @@ namespace AmazoomDebug
 
                         jobsPerformed++;
                     }
-
-                    //Console.WriteLine(AllJobs.Count);
-
-
 
                     // Removing Jobs that are assigned to a robot
                     AllJobs.RemoveRange(0, jobsPerformed);

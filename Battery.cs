@@ -28,7 +28,6 @@ namespace AmazoomDebug
             {
                 BatteryLevel -= 10;
                 Console.WriteLine("Battery: " + BatteryLevel);
-
             }
             return true;
 
