@@ -36,26 +36,9 @@ namespace AmazoomDebug
 
     class ShippingTruck : Trucks
     {
-        public void Deploy()
-        {
-            while (true)
-            {
-                if (Warehouse.LoadedToTruck.Count != 0)
-                {
-                    double totalWeight = 0;
-                    double totalVolume = 0;
-
-                    foreach(var itemsLoaded in Warehouse.LoadedToTruck)
-                    {
-                        
-                    }
-                }
-            }
-        }
     }
 
     class InventoryTruck : Trucks
     {
-
     }
 }

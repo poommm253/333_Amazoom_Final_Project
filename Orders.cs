@@ -6,14 +6,21 @@ namespace AmazoomDebug
     class Orders
     {
         public string OrderId { get; set; }
-        private List<Products> ordered { get; set; } = new List<Products>();
+        public List<Products> Ordered { get; set; } = new List<Products>();
         public string UserId { get; set; }
         public bool IsShipped { get; set; }
 
         public Orders(string id, List<Products> orders, string userId, bool status)
         {
             OrderId = id;
-            ordered = orders;
+            Ordered = orders;
+            UserId = userId;
+            IsShipped = status;
+        }
+
+        public Orders(string id, string userId, bool status)
+        {
+            OrderId = id;
             UserId = userId;
             IsShipped = status;
         }
@@ -22,7 +29,7 @@ namespace AmazoomDebug
         {
             double weight = 0;
 
-            foreach (var product in this.ordered)
+            foreach (var product in this.Ordered)
             {
                 weight += product.Weight;
             }
@@ -34,7 +41,7 @@ namespace AmazoomDebug
         {
             double volume = 0;
 
-            foreach (var product in this.ordered)
+            foreach (var product in this.Ordered)
             {
                 volume += product.Volume;
             }

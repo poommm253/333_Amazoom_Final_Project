@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
 using Newtonsoft.Json.Schema;
+using System.Threading;
+using System.Runtime.InteropServices;
+using System.ComponentModel;
 
 namespace AmazoomDebug
 {
@@ -12,6 +15,7 @@ namespace AmazoomDebug
     /// </summary>
     class Warehouse
     {
+        public static Mutex addingOrder = new Mutex();
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
@@ -28,9 +32,13 @@ namespace AmazoomDebug
         private static List<Coordinate> isEmpty = new List<Coordinate>();
         private static List<Coordinate> isOccupied = new List<Coordinate>();
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
+
         private static List<Robot> operationalRobots = new List<Robot>();
         private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
         private static List<InventoryTruck> operationalInventoryTrucks = new List<InventoryTruck>();
+
+        private static List<Orders> completedOrders = new List<Orders>();
+        private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
         /// <summary>
         /// reads setup file and initializes the warehouse with all the primary global constants
@@ -106,8 +114,11 @@ namespace AmazoomDebug
 
             // Check for incoming order in the background and assign jobs to the robots all in the background and adding tasks to the robot
             Task orderCheck = Task.Run(() => OrderListener(database));
+
+            // Check for truck loading
+            Task shippingCheck = Task.Run(() => ShippingTruckVerification(database));
             
-            // Check for truck loading and unloading from the shipping and inventory trucks
+            //and unloading from the shipping and inventory trucks
 
 
             // Wait all
@@ -115,6 +126,7 @@ namespace AmazoomDebug
             Task.WaitAll(shippingTrucks);
             Task.WaitAll(inventoryTruck);
             orderCheck.Wait();
+            shippingCheck.Wait();
         }
 
         private void GenerateLayout()
@@ -351,67 +363,81 @@ namespace AmazoomDebug
                     List<Object> prodInOrder = (List<Object>)newOrderDetail["Items"];
                     List<Products> tempProd = new List<Products>();
 
-                    // Create Jobs and Store a copy of Orders locally
-                    //Console.WriteLine("Creating jobs...");
-                    foreach(var prod in prodInOrder)
+                    if (Convert.ToBoolean(newOrderDetail["isShipped"]))
                     {
-                        // search id for the corresponding Product
-                        foreach(var item in AllProducts)
-                        {
-                            if (prod.ToString() == item.ProductID)
-                            {
-                                Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
-                                tempProd.Add(item);
-
-                                //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
-                                
-                                
-
-
-                                // TODO: Might move to when robot loaded products onto the trucks
-                                // Updating product remaining coordinates
-                                isEmpty.Add(item.Location[0]);
-                                isOccupied.Remove(item.Location[0]);
-                                item.Location.RemoveAt(0);
-
-
-
-
-
-                                //Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
-
-                                AllJobs.Add(newJob);
-                                //Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
-
-                                // Instantiating orders locally
-                                LocalOrders.Add(new Orders(
+                        completedOrders.Add(new Orders(
                                     newOrders.Document.Id,
-                                    tempProd,
                                     newOrderDetail["user"].ToString(),
                                     Convert.ToBoolean(newOrderDetail["isShipped"])
                                     ));
+                    }
+                    else
+                    {
+                        // Create Jobs and Store a copy of Orders locally
+                        //Console.WriteLine("Creating jobs...");
+                        foreach (var prod in prodInOrder)
+                        {
+                            // search id for the corresponding Product
+                            foreach (var item in AllProducts)
+                            {
+                                if (prod.ToString() == item.ProductID)
+                                {
+                                    Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
+                                    tempProd.Add(item);
 
-                                break;
+                                    //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
+
+
+
+
+                                    // TODO: Might move to when robot loaded products onto the trucks
+                                    // Updating product remaining coordinates
+                                    isEmpty.Add(item.Location[0]);
+                                    isOccupied.Remove(item.Location[0]);
+                                    item.Location.RemoveAt(0);
+
+
+
+
+
+                                    //Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
+
+                                    AllJobs.Add(newJob);
+                                    //Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
+
+                                    // Instantiating orders locally
+                                    addingOrder.WaitOne();
+                                    LocalOrders.Add(new Orders(
+                                        newOrders.Document.Id,
+                                        tempProd,
+                                        newOrderDetail["user"].ToString(),
+                                        Convert.ToBoolean(newOrderDetail["isShipped"])
+                                        ));
+                                    addingOrder.ReleaseMutex();
+
+                                    break;
+                                }
                             }
                         }
+
+                        // Assigning Jobs to robots by Column
+                        foreach (var currentJobs in AllJobs)
+                        {
+                            Console.WriteLine("job location: " + currentJobs.RetrieveCoord.Row + currentJobs.RetrieveCoord.Column + currentJobs.RetrieveCoord.Shelf);
+
+                            int toAssign = (currentJobs.RetrieveCoord.Column) - 1;    // calculating product location and the corresponding robot in that columns
+
+                            Console.WriteLine("This job is assigned to robot: " + toAssign + " to retrieve " + currentJobs.ProdId.ProductName);
+                            operationalRobots[toAssign].AddJob(currentJobs);
+
+                        }
+
+                        // Removing Jobs that are assigned to a robot
+                        AllJobs.Clear();
+
+                        Console.WriteLine("Jobs count: " + AllJobs.Count);
                     }
-
-                    int jobsPerformed = -1;
-                    // Assigning Jobs to robots by Column
-                    foreach(var currentJobs in AllJobs)
-                    {
-                        Console.WriteLine("job location: " + currentJobs.RetrieveCoord.Row + currentJobs.RetrieveCoord.Column + currentJobs.RetrieveCoord.Shelf);
-
-                        int toAssign = (currentJobs.RetrieveCoord.Column) - 1;    // calculating product location and the corresponding robot in that columns
-
-                        Console.WriteLine("This job is assigned to robot: " + toAssign + " to retrieve " + currentJobs.ProdId.ProductName);
-                        operationalRobots[toAssign].AddJob(currentJobs);
-
-                        jobsPerformed++;
-                    }
-
-                    // Removing Jobs that are assigned to a robot
-                    AllJobs.RemoveRange(0, jobsPerformed);
+                    
                 }
             });
 
@@ -426,10 +452,68 @@ namespace AmazoomDebug
         /// <summary>
         /// Perform all final checks before shipping; truck weight and volume limitation; toggling Order status if all Products from that order is loaded
         /// </summary>
-        public static void LoadingTruckVerification()
+        private static void ShippingTruckVerification(FirestoreDb database)
         {
             // check order id from the job and stores it and count the number of products in that order
-                
+            while (true)
+            {
+                if(LoadedToTruck.Count != 0)
+                {
+                    foreach(var loadedProduct in LoadedToTruck)    // something is modified inside the loop ERROR!
+                    {
+                        string partialOrderId = loadedProduct.OrderId;
+                        Products partialProduct = loadedProduct.ProdId;
+
+                        // perform check against LocalOrder, gotta lock thread safe
+                        addingOrder.WaitOne();
+                        foreach(var completeOrder in LocalOrders)
+                        {
+                            if (partialOrderId == completeOrder.OrderId)
+                            {
+                                if (completeOrder.Ordered.Contains(partialProduct))
+                                {
+                                    // add new key value to dictionary, if key: orderId and value: product count == product count in actual order, then set status to true
+                                    if (partialOrders.ContainsKey(completeOrder.OrderId))
+                                    {
+                                        partialOrders[completeOrder.OrderId]--;
+                                    }
+                                    else
+                                    {
+                                        partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
+                                    }
+                                    completeOrder.Ordered.Remove(partialProduct);
+                                    break;
+                                }
+                            }
+                        }
+                        addingOrder.ReleaseMutex();
+                    }
+
+                    foreach(var pair in partialOrders)
+                    {                        
+                        for(int i = 0; i < LocalOrders.Count; i++)
+                        {
+                            int emptyCount = 0;
+
+                            if (pair.Key == LocalOrders[i].OrderId && pair.Value == emptyCount)
+                            {
+                                DocumentReference updateOrderStatus = database.Collection("User Orders").Document(LocalOrders[i].OrderId);
+                                Dictionary<string, Object> toggleOrderStatus = new Dictionary<string, Object>();
+                                toggleOrderStatus.Add("isShipped", true);
+
+                                updateOrderStatus.UpdateAsync(toggleOrderStatus);
+                                LocalOrders.RemoveAt(i);
+                                break;
+                            }
+                        }                        
+                    }
+                }
+                else
+                {
+                    Thread.Sleep(5000);
+                    Console.WriteLine("All orders completed.");
+                }
+            }
         }
     }
 }

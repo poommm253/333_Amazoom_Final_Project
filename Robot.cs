@@ -147,6 +147,9 @@ namespace AmazoomDebug
 
             CarryingItem.Clear();
 
+            // Verifying what got on the shipping truck and attemp to check which order is one the truck
+            //Warehouse.ShippingTruckVerification();
+
             Console.WriteLine("empty: " + (CarryingItem.Count == 0));
 
             Movement(Warehouse.Rows);
@@ -235,6 +238,5 @@ namespace AmazoomDebug
             }
             return (closestPath, retreval);
         }
-        
     }
 }
