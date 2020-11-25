@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace AmazoomDebug
 {
-    public class Coordinate
+    class Coordinate
     {
         public int Row { get; set; }
         public int Column { get; set; }
@@ -24,6 +24,13 @@ namespace AmazoomDebug
             Row = row;
             Column = column;
             Shelf = shelf;
+        }
+
+        public string CoordToString()
+        {
+            string coordniateString = Row + " " + Column + " " + Shelf;
+
+            return coordniateString;
         }
     }
 }

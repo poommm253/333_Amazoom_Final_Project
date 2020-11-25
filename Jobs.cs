@@ -17,12 +17,14 @@ namespace AmazoomDebug
         {
         }
 
-        public Jobs (Products prodId, string orderId, bool restock, bool retrieve)
+        public Jobs (Products prodId, string orderId, bool restock, bool retrieve, Coordinate retrieveCoord, Coordinate restockCoord)
         {
             ProdId = prodId;
             OrderId = orderId;
             Restock = restock;
             Retrieve = retrieve;
+            RestockCoord = restockCoord;
+            RetrieveCoord = retrieveCoord;
         }
     }
 }

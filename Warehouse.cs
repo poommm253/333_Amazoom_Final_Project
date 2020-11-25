@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
 using System.Linq;
+using System.Threading;
 
 namespace AmazoomDebug
 {
@@ -12,7 +13,6 @@ namespace AmazoomDebug
     /// </summary>
     class Warehouse
     {
-        
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
@@ -20,8 +20,8 @@ namespace AmazoomDebug
         public static int RobotCapacity { get; set; } 
         public static int Shelves { get; set; }
         public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
-        public static List<Products> allProducts { get; set; } = new List<Products>();
-        public static List<Jobs> IncomingOrders { get; set; } = new List<Jobs>();
+        public static List<Products> AllProducts { get; set; } = new List<Products>();
+        public static List<Jobs> AllJobs { get; set; } = new List<Jobs>();
 
         private static List<Coordinate> isEmpty = new List<Coordinate>();    // TODO: Change to Stack class or Queue class
         private static List<Coordinate> isOccupied = new List<Coordinate>();
@@ -62,25 +62,35 @@ namespace AmazoomDebug
         {
             // Initialization of Automated Warehouse
             GenerateLayout();
-            InstantiateRobots();
+            
 
             string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
             Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
 
+            InstantiateRobots(database).Wait();
+
             FetchData(database).Wait();
 
             // Deploying robots
-            /*Task[] robots = new Task[Columns];
-            for (int i = 0; i < Columns; i++)
+            Task[] robots = new Task[Columns];
+
+            int index = 0;
+            foreach(Robot opRobot in operationalRobots)
             {
-                robots[i] = Task.Run(() => operationalRobots[i].Deploy());
-            }*/
+                robots[index] = Task.Run(() => opRobot.Deploy());
+                index++;
+            }
 
             // Add tasks to robots somehow while (true)
 
+
+            // Check for incoming order in the background and assign jobs to the robots all in the background
+            Task orderCheck = Task.Run(() => OrderListener(database));
+
             // Continuos check for incoming updates and order
             //Task.WaitAll(robots);
+            orderCheck.Wait();
         }
 
         private void GenerateLayout()
@@ -99,12 +109,45 @@ namespace AmazoomDebug
             }
         }
 
-        private void InstantiateRobots()
+        private async Task InstantiateRobots(FirestoreDb database)
         {
-            // Instantiating robots
-            for (int i = 1; i <= Columns; i++)
+            // Check firestore for previously initialized robots and Instantiate robots based on previously saved locations
+            CollectionReference allRobot = database.Collection("All robot");
+            QuerySnapshot fetchedRobot = await allRobot.GetSnapshotAsync();
+
+            if (fetchedRobot.Count != 0)
             {
-                operationalRobots.Add(new Robot("AMAZOOM_AW_" + i.ToString(), new Battery(100), new Coordinate(0, i)));
+                foreach(DocumentSnapshot robotInfo in fetchedRobot.Documents)
+                {
+                    Dictionary<string, Object> robotDetail = robotInfo.ToDictionary();
+
+                    string[] fetchedCoordinate = robotDetail["coordinate"].ToString().Split(" ");
+
+                    operationalRobots.Add(new Robot(
+                        robotInfo.Id,
+                        new Battery(Convert.ToInt32(robotDetail["battery"])),
+                        new Coordinate(Convert.ToInt32(fetchedCoordinate[0]), Convert.ToInt32(fetchedCoordinate[1]), Convert.ToInt32(fetchedCoordinate[2]))
+                        ));
+                }
+                Console.WriteLine("Robots info fetched sucessfully.");
+            }
+            else
+            {
+                // Instantiating new robots
+                for (int i = 1; i <= Columns; i++)
+                {
+                    operationalRobots.Add(new Robot("AMAZOOM_AW_" + i.ToString(), new Battery(100), new Coordinate(0, i)));
+                }
+                foreach(var robots in operationalRobots)
+                {
+                    Dictionary<string, string> initialRobotParams = new Dictionary<string, string>();
+
+                    initialRobotParams.Add("battery", "100");
+                    initialRobotParams.Add("coordinate", robots.Sector.CoordToString());
+
+                    await allRobot.AddAsync(initialRobotParams);
+                }
+                Console.WriteLine("Robot added to database successfully.");
             }
         }
 
@@ -122,11 +165,11 @@ namespace AmazoomDebug
                         Dictionary<string, Object> prodDetail = productInfo.ToDictionary();
                         
                         List<Coordinate> assignCoord = new List<Coordinate>();
-                        List<Object> test = (List<Object>) prodDetail["coordinate"];
+                        List<Object> fetchedCoordinates = (List<Object>) prodDetail["coordinate"];
 
-                        foreach(var item in test)
+                        foreach(var coord in fetchedCoordinates)
                         {
-                            string[] assign = item.ToString().Split(" ");
+                            string[] assign = coord.ToString().Split(" ");
 
                             // Row, Column, Shelf
                             Coordinate fetched = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
@@ -147,7 +190,7 @@ namespace AmazoomDebug
                         }*/
                         
                         // Creating Product object for all of the documents on Cloud Firestore
-                        Warehouse.allProducts.Add(new Products(
+                        Warehouse.AllProducts.Add(new Products(
                             prodDetail["name"].ToString(),
                             productInfo.Id,     
                             assignCoord,
@@ -156,11 +199,12 @@ namespace AmazoomDebug
                             Convert.ToInt32(prodDetail["inStock"]),
                             Convert.ToDouble(prodDetail["price"])));
                     }
+                    Console.WriteLine("Products fetched sucessfully.");
 
-                    foreach (var element in Warehouse.allProducts)
+/*                    foreach (var element in Warehouse.allProducts)
                     {
                         Console.WriteLine(element.Location[0].Column);
-                    }
+                    }*/
                 }
                 else
                 {
@@ -175,7 +219,7 @@ namespace AmazoomDebug
 
         private void InitialCoordinateRandomizer(FirestoreDb database)
         {
-            // Add new products
+            // Add new products if no data on Cloud Firestore
             List<Products> newProducts = new List<Products>()
             {
                 new Products("TV", "1", 12.0, 0.373, 40, 5999.0),
@@ -239,6 +283,8 @@ namespace AmazoomDebug
 
                     await addingProd.AddAsync(conversion);
                 }
+                Console.WriteLine("Products added to database sucessfully");
+
             }
             catch (Exception error)
             {
@@ -246,18 +292,67 @@ namespace AmazoomDebug
             }
         }
 
-        private async Task OrderListener(FirestoreDb database)
+        private void OrderListener(FirestoreDb database)
         {
             Query incomingOrders = database.Collection("User Orders");
+
             FirestoreChangeListener notifier = incomingOrders.Listen(orders =>
             {
-                Console.WriteLine("New order received");
-                foreach(DocumentChange newOrders in orders.Changes)
+                //Console.WriteLine("New order received...");
+                foreach (DocumentChange newOrders in orders.Changes)
                 {
+                    Dictionary<string, Object> newOrderDetail = newOrders.Document.ToDictionary();
+
+                    List<Object> prodInOrder = (List<Object>)newOrderDetail["Items"];
+
                     // Create Jobs
+                    //Console.WriteLine("Creating jobs...");
+
+                    foreach(var prod in prodInOrder)
+                    {
+                        // search id for the corresponding Product
+                        foreach(var item in AllProducts)
+                        {
+                            if (prod.ToString() == item.ProductID)
+                            {
+                                Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
+
+                                // Updating product remaining coordinates
+                                isEmpty.Add(item.Location[0]);
+                                isOccupied.Remove(item.Location[0]);
+                                item.Location.RemoveAt(0);
+
+                                AllJobs.Add(newJob);
+                                break;
+                                //Console.WriteLine("New job created successfully.");
+                            }
+                        }
+                    }
+
+                    int jobsPerformed = -1;
+                    // Assigning Jobs to robots by Column
+                    foreach(var currentJobs in AllJobs)
+                    {
+                        int toAssign = (currentJobs.ProdId.Location[0].Column) - 1;    // calculating product location and the corresponding robot in that columns
+
+                        operationalRobots[toAssign].AddJob(currentJobs);
+
+                        jobsPerformed++;
+                    }
+
+                    //Console.WriteLine(AllJobs.Count);
+
+
+
+                    // Removing Jobs that are assigned to a robot
+                    AllJobs.RemoveRange(0, jobsPerformed);
                 }
             });
+
+            notifier.ListenerTask.Wait();
+            
         }
+
         public static void AddToTruck(Jobs toTruck)
         {
             LoadedToTruck.Add(toTruck);
