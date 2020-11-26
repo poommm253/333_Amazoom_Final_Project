@@ -136,7 +136,7 @@ namespace AmazoomDebug
             Movement(Warehouse.LoadingDockRow);
             carryingCapacity = Warehouse.RobotCapacity;    // load everything to the shipping truck
 
-            Warehouse.psem.Wait();
+            //Warehouse.psem.Wait();
             foreach(var goingToLoad in CarryingItem)
             {
                 Warehouse.AddToTruck(goingToLoad);
@@ -145,7 +145,7 @@ namespace AmazoomDebug
             {
                 Console.WriteLine(element.ProdId.ProductName);
             }
-            Warehouse.csem.Release();
+            //Warehouse.csem.Release();
 
             CarryingItem.Clear();
 

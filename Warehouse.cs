@@ -468,68 +468,20 @@ namespace AmazoomDebug
         {
             while (true)
             {
-                csem.Wait();
+                //csem.Wait();
 
                 dockTimer.Start();
-                Console.WriteLine(dockTimer.ElapsedMilliseconds);
-
-                LoadedToTruck.TryPeek(out Jobs currentJob);
-                if((carryWeight - currentJob.ProdId.Weight >= 0 && carryVol - currentJob.ProdId.Volume >= 0))
-                {
-                    carryWeight -= currentJob.ProdId.Weight;
-                    carryVol -= currentJob.ProdId.Volume;
-
-                    Console.WriteLine("Allow loading.");
-
-                    waitForShip.Add(currentJob.ProdId);
-                }
-                else if (dockTimer.ElapsedMilliseconds >= 5000)
-                {
-                    // Ship the truck
-                    int truckId = 1;
-                    foreach(var truckAvail in shippingTrucks)
-                    {
-                        if (truckAvail)
-                        {
-                            waitForShip.Clear();
-                            carryVol = TruckCapacityVol;
-                            carryWeight = TruckCapacityWeight;
-
-                            Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);
-                            break;
-                        }
-                        truckId++;
-                    }
-
-                    foreach (var item in waitForShip)
-                    {
-                        Console.WriteLine("items that are loaded and ready to ship: " + item.ProductName + " to truck " + truckId);
-                    }
-
-                    shippingTrucks[truckId - 1] = !shippingTrucks[truckId - 1];
-
-                    Task.Run(() => 
-                    {
-                        Random simulatedDeliveryTime = new Random();
-                        int resetTime = simulatedDeliveryTime.Next(3000, 7000);
-
-                        Thread.Sleep(resetTime);
-                        Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);
-
-                        shippingTrucks[truckId - 1] = true;
-                    });
-                }
-
+                //Console.WriteLine(dockTimer.ElapsedMilliseconds);
                 // perform check against LocalOrder, gotta lock thread safe
                 addingOrder.WaitOne();
-                foreach(var loadedProduct in LoadedToTruck)
+                foreach (var loadedProduct in LoadedToTruck)
                 {
                     string partialOrderId = loadedProduct.OrderId;
                     Products partialProduct = loadedProduct.ProdId;
 
                     foreach (var completeOrder in LocalOrders)
                     {
-                        if (currentJob.OrderId == completeOrder.OrderId)
+                        if (partialOrderId == completeOrder.OrderId)
                         {
                             if (completeOrder.Ordered.Contains(partialProduct))
                             {
@@ -549,7 +501,7 @@ namespace AmazoomDebug
                     }
                 }
                 addingOrder.ReleaseMutex();
-            
+
 
                 foreach (var pair in partialOrders)
                 {
@@ -570,14 +522,77 @@ namespace AmazoomDebug
                     }
                 }
 
-                psem.Release();
+                if (LoadedToTruck.TryDequeue(out Jobs currentJob) || waitForShip.Count != 0)
+                {
+                    if(currentJob != null)
+                    {
+                        if ((carryWeight - currentJob.ProdId.Weight >= 0 && carryVol - currentJob.ProdId.Volume >= 0))
+                        {
+                            carryWeight -= currentJob.ProdId.Weight;
+                            carryVol -= currentJob.ProdId.Volume;
+
+                            Console.WriteLine("Allow loading.");
+
+                            waitForShip.Add(currentJob.ProdId);
+                        }
+                    }
+                    else if (dockTimer.ElapsedMilliseconds >= 5000)
+                    {
+                        // Ship the truck
+                        int truckId = 1;
+                        foreach (var truckAvail in shippingTrucks)
+                        {
+                            if (truckAvail)
+                            {
+                                Console.WriteLine("Items in TruckID: ship{0} : ", truckId);
+
+                                foreach(var item in waitForShip)
+                                {
+                                    Console.WriteLine(item.ProductName);
+                                }
+
+                                waitForShip.Clear();
+                                carryVol = TruckCapacityVol;
+                                carryWeight = TruckCapacityWeight;
+
+                                Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);
+                                break;
+                            }
+                            truckId++;
+                        }
+
+                        foreach (var item in waitForShip)
+                        {
+                            Console.WriteLine("items that are loaded and ready to ship: " + item.ProductName + " to truck " + truckId);
+                        }
+
+                        shippingTrucks[truckId - 1] = !shippingTrucks[truckId - 1];
+
+                        Task.Run(() =>
+                        {
+                            Random simulatedDeliveryTime = new Random();
+                            int resetTime = simulatedDeliveryTime.Next(3000, 7000);
+
+                            Thread.Sleep(resetTime);
+                            Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);
+
+                            shippingTrucks[truckId - 1] = true;
+                        });
+                    }  
+                }
+                else
+                {
+                    Thread.Sleep(5000);
+                }
+
+                //psem.Release();
             }
         }
 
         /// <summary>
         /// Perform all final checks before shipping; truck weight and volume limitation; toggling Order status if all Products from that order is loaded
         /// </summary>
-        private static void ShippingTruckVerification(FirestoreDb database)
+        /*private static void ShippingTruckVerification(FirestoreDb database)
         {
             // check order id from the job and stores it and count the number of products in that order
             while (true)
@@ -639,6 +654,6 @@ namespace AmazoomDebug
                     Console.WriteLine("All orders completed.");
                 }
             }
-        }
+        }*/
     }
 }
