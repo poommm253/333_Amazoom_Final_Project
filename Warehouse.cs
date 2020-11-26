@@ -17,8 +17,8 @@ namespace AmazoomDebug
     class Warehouse
     {
         public static Mutex addingOrder = new Mutex();
-        public static SemaphoreSlim csem = new SemaphoreSlim(0);
-        public static SemaphoreSlim psem = new SemaphoreSlim(1);
+        public static SemaphoreSlim dockLocking = new SemaphoreSlim(4);
+        
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
@@ -37,6 +37,7 @@ namespace AmazoomDebug
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
 
         private static List<Robot> operationalRobots = new List<Robot>();
+        private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
 
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
@@ -93,7 +94,7 @@ namespace AmazoomDebug
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
 
             InstantiateRobots(database).Wait();
-
+            InstantiateTrucks(4);
             FetchData(database).Wait();
 
             // Deploying robots
@@ -107,17 +108,17 @@ namespace AmazoomDebug
             }
 
             // Deploying shipping and invertory trucks
-            /*Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
-            Task[] inventoryTruck = new Task[operationalShippingTrucks.Count];
+            Task[] Trucks = new Task[operationalShippingTrucks.Count];
+            //Task[] inventoryTruck = new Task[operationalShippingTrucks.Count];
 
-            int tIndex = 0;
+            //int tIndex = 0;
             int sIndex = 0;
             foreach (var opShipTruck in operationalShippingTrucks)
             {
-                shippingTrucks[sIndex] = Task.Run(() => opShipTruck.Deploy());
+                Trucks[sIndex] = Task.Run(() => opShipTruck.Deploy());
                 sIndex++;
             }
-            foreach (var opInvTruck in operationalInventoryTrucks)
+           /* foreach (var opInvTruck in operationalInventoryTrucks)
             {
                 inventoryTruck[tIndex] = Task.Run(() => opInvTruck.Deploy());
                 tIndex++;
@@ -156,6 +157,13 @@ namespace AmazoomDebug
             }
         }
 
+        private void InstantiateTrucks(int quantity)
+        {
+            for(int i = 0; i < quantity; i++)
+            {
+                operationalShippingTrucks.Add(new ShippingTruck("truck_" + i));
+            }
+        }
         private async Task InstantiateRobots(FirestoreDb database)
         {
             // Check firestore for previously initialized robots and Instantiate robots based on previously saved locations
@@ -458,7 +466,7 @@ namespace AmazoomDebug
         {
             while (true)
             {
-                // perform check against LocalOrder, gotta lock thread safe
+                // perform check against LocalOrder and update to Firebase to notify user when every product in their order is shipped
                 addingOrder.WaitOne();
                 foreach (var loadedProduct in LoadedToTruck)
                 {
@@ -508,7 +516,33 @@ namespace AmazoomDebug
                     }
                 }
 
-                dockTimer.Start();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*                dockTimer.Start();
 
                 if (LoadedToTruck.TryDequeue(out Jobs currentJob) || waitForShip.Count != 0)
                 {
@@ -567,7 +601,7 @@ namespace AmazoomDebug
                             shippingTrucks[truckId - 1] = true;
                         });
                     }
-                }
+                }*/
             }
         }
 
