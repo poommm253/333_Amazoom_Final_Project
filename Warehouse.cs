@@ -96,7 +96,7 @@ namespace AmazoomDebug
             }
 
             // Deploying shipping and invertory trucks
-            Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
+            /*Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
             Task[] inventoryTruck = new Task[operationalShippingTrucks.Count];
 
             int tIndex = 0;
@@ -110,7 +110,7 @@ namespace AmazoomDebug
             {
                 inventoryTruck[tIndex] = Task.Run(() => opInvTruck.Deploy());
                 tIndex++;
-            }
+            }*/
 
             // Check for incoming order in the background and assign jobs to the robots all in the background and adding tasks to the robot
             Task orderCheck = Task.Run(() => OrderListener(database));
@@ -123,8 +123,8 @@ namespace AmazoomDebug
 
             // Wait all
             Task.WaitAll(robots);
-            Task.WaitAll(shippingTrucks);
-            Task.WaitAll(inventoryTruck);
+            //Task.WaitAll(shippingTrucks);
+            //Task.WaitAll(inventoryTruck);
             orderCheck.Wait();
             shippingCheck.Wait();
         }
