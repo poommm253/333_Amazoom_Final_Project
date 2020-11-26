@@ -37,10 +37,7 @@ namespace AmazoomDebug
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
 
         private static List<Robot> operationalRobots = new List<Robot>();
-        private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
-        private static List<InventoryTruck> operationalInventoryTrucks = new List<InventoryTruck>();
 
-        private static List<Orders> completedOrders = new List<Orders>();
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
 
@@ -131,7 +128,7 @@ namespace AmazoomDebug
 
             // Check for truck loading
             Task shippingCheck = Task.Run(() => ShippingVerificationV2(database));
-            
+            Task restockingCheck = Task.Run(() => RestockingVerification(database));
             //and unloading from the shipping and inventory trucks
 
 
@@ -379,11 +376,7 @@ namespace AmazoomDebug
 
                     if (Convert.ToBoolean(newOrderDetail["isShipped"]))
                     {
-                        completedOrders.Add(new Orders(
-                                    newOrders.Document.Id,
-                                    newOrderDetail["user"].ToString(),
-                                    Convert.ToBoolean(newOrderDetail["isShipped"])
-                                    ));
+                        continue;
                     }
                     else
                     {
@@ -400,18 +393,15 @@ namespace AmazoomDebug
                                     tempProd.Add(item);
 
                                     //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
-
-
-
+                                    
+                                    // Decrement stock when order is placed
+                                    //item.InStock--;
 
                                     // TODO: Might move to when robot loaded products onto the trucks
                                     // Updating product remaining coordinates
                                     isEmpty.Add(item.Location[0]);
                                     isOccupied.Remove(item.Location[0]);
                                     item.Location.RemoveAt(0);
-
-
-
 
 
                                     //Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
@@ -520,72 +510,87 @@ namespace AmazoomDebug
 
                 dockTimer.Start();
 
-                if (LoadedToTruck.TryDequeue(out Jobs currentJob))
+                if (LoadedToTruck.TryDequeue(out Jobs currentJob) || waitForShip.Count != 0)
                 {
-                    if(currentJob != null)
+                    int truckId = 1;
+                    if (currentJob != null)
                     {
+                        foreach (var availableTruck in shippingTrucks)
+                        {
+                            if (availableTruck)
+                            {
+                                break;
+                            }
+                            else
+                            {
+                                truckId++;
+                            }
+                        }
+
                         if ((carryWeight - currentJob.ProdId.Weight >= 0 && carryVol - currentJob.ProdId.Volume >= 0))
                         {
                             carryWeight -= currentJob.ProdId.Weight;
                             carryVol -= currentJob.ProdId.Volume;
 
-                            Console.WriteLine("Allow loading.");
+                            Console.WriteLine("Allow loading to truck {0}",truckId);    // It worked just the truckId is weird.
 
                             waitForShip.Add(currentJob.ProdId);
                         }
                     }
                     else if (dockTimer.ElapsedMilliseconds >= 5000)
                     {
-                        Console.WriteLine("Time elapsed: " + dockTimer.ElapsedMilliseconds);
+                        Console.WriteLine("Time warning: " + dockTimer.ElapsedMilliseconds);
                         dockTimer.Reset();
 
-                        // Ship the truck
-                        int truckId = 1;
-                        foreach (var truckAvail in shippingTrucks)
-                        {
-                            if (truckAvail)
-                            {
-                                Console.WriteLine("Items in TruckID: ship{0} : ", truckId);
-
-                                foreach(var item in waitForShip)
-                                {
-                                    Console.WriteLine(item.ProductName);
-                                }
-
-                                waitForShip.Clear();
-                                carryVol = TruckCapacityVol;
-                                carryWeight = TruckCapacityWeight;
-
-                                Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);
-                                break;
-                            }
-                            truckId++;
-                        }
-
+                        Console.WriteLine("Items in TruckID: ship{0} : ", truckId);    // It worked just the truckId is weird.
                         foreach (var item in waitForShip)
                         {
-                            Console.WriteLine("items that are loaded and ready to ship: " + item.ProductName + " to truck " + truckId);
+                            Console.WriteLine(item.ProductName);
                         }
+
+                        waitForShip.Clear();
+                        carryVol = TruckCapacityVol;
+                        carryWeight = TruckCapacityWeight;
+
+                        Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);     // It worked just the truckId is weird.
 
                         shippingTrucks[truckId - 1] = !shippingTrucks[truckId - 1];
 
                         Task.Run(() =>
                         {
                             Random simulatedDeliveryTime = new Random();
-                            int resetTime = simulatedDeliveryTime.Next(3000, 7000);
+                            int resetTime = simulatedDeliveryTime.Next(10000, 20000);
 
                             Thread.Sleep(resetTime);
-                            Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);
+                            Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);     // It worked just the truckId is weird.
 
                             shippingTrucks[truckId - 1] = true;
                         });
-                    }  
-                }
-                else
-                {
-                    Thread.Sleep(5000);
+                    }
                 }
             }
+        }
+
+        private void RestockingVerification(FirestoreDb database)
+        {
+            Query checkStock = database.Collection("All products");
+
+            FirestoreChangeListener lowStockAlert = checkStock.Listen(alert =>
+            {
+                foreach(var currentStock in alert.Changes)
+                {
+                    Dictionary<string, Object> lowAlertDict = currentStock.Document.ToDictionary();
+
+                    if (Convert.ToInt32(lowAlertDict["inStock"]) == 10)
+                    {
+                        // Signal Restock and update on Firebase
+                        int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
+                        DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
+                        lowAlertDict["inStock"] = quantity;
+                    }
+                }
+            });
+            lowStockAlert.ListenerTask.Wait();
         }
     }
 }
