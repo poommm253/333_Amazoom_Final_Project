@@ -8,7 +8,6 @@ namespace AmazoomDebug
 {
     class Trucks
     {
-        
         private int truckVol = Warehouse.TruckCapacityVol;
         private int truckWeight = Warehouse.TruckCapacityWeight;
         public bool IsAvailable { get; set; } = true;
@@ -32,19 +31,6 @@ namespace AmazoomDebug
 
             Thread.Sleep(resetTime);    // Simulate a random travel time for each truck to leave and return to the warehouse
             return true;
-        }
-
-        private void OutForService()
-        {
-            double totalWeight = 0;
-            double totalVolume = 0;
-            foreach(var checkLimitation in Warehouse.LoadedToTruck)
-            {
-                totalWeight += checkLimitation.ProdId.Weight;
-                totalVolume += checkLimitation.ProdId.Volume;
-            }
-            // TODO: Check weight and volume of product according to truck's limitations on weight and volume.
-            IsAvailable = false;
         }
     }
 
