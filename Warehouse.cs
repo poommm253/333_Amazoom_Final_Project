@@ -7,6 +7,7 @@ using Newtonsoft.Json.Schema;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace AmazoomDebug
 {
@@ -16,15 +17,17 @@ namespace AmazoomDebug
     class Warehouse
     {
         public static Mutex addingOrder = new Mutex();
+        public static SemaphoreSlim csem = new SemaphoreSlim(0);
+        public static SemaphoreSlim psem = new SemaphoreSlim(1);
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
         public static int TravelTime { get; set; }
         public static int RobotCapacity { get; set; } 
-        public static int TruckCapacityVol { get; set; }
-        public static int TruckCapacityWeight { get; set; }
+        public static double TruckCapacityVol { get; set; }
+        public static double TruckCapacityWeight { get; set; }
         public static int Shelves { get; set; }
-        public static ConcurrentBag<Jobs> LoadedToTruck { get; set; } = new ConcurrentBag<Jobs>();
+        public static ConcurrentQueue<Jobs> LoadedToTruck { get; set; } = new ConcurrentQueue<Jobs>();
         public static List<Products> AllProducts { get; set; } = new List<Products>();
         public static List<Jobs> AllJobs { get; set; } = new List<Jobs>();
         public static List<Orders> LocalOrders { get; set; } = new List<Orders>();
@@ -40,6 +43,14 @@ namespace AmazoomDebug
         private static List<Orders> completedOrders = new List<Orders>();
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
+
+
+        private static Stopwatch dockTimer = new Stopwatch();
+        private static List<Products> waitForShip = new List<Products>();
+        private static List<bool> shippingTrucks = new List<bool>() { true, true };
+        private static double carryVol;
+        private static double carryWeight;
+
         /// <summary>
         /// reads setup file and initializes the warehouse with all the primary global constants
         /// </summary>
@@ -54,14 +65,17 @@ namespace AmazoomDebug
 
             try
             {
-                Rows = Int32.Parse(keys[0]);
-                Columns = Int32.Parse(keys[1]);
-                Shelves = Int32.Parse(keys[2]);
-                RobotCapacity = Int32.Parse(keys[3]);
-                TravelTime = Int32.Parse(keys[4]);
+                Rows = Int32.Parse(keys[0]);                    //5
+                Columns = Int32.Parse(keys[1]);                 //8
+                Shelves = Int32.Parse(keys[2]);                 //6
+                RobotCapacity = Int32.Parse(keys[3]);           //30
+                TravelTime = Int32.Parse(keys[4]);              //500
                 LoadingDockRow = Rows + 1;
-                TruckCapacityVol = Int32.Parse(keys[5]);
-                TruckCapacityWeight = Int32.Parse(keys[6]);
+                TruckCapacityVol = Int32.Parse(keys[5]);        //10
+                TruckCapacityWeight = Int32.Parse(keys[6]);     //200
+
+                carryVol = TruckCapacityVol;
+                carryWeight = TruckCapacityWeight;
 
                 setup.Close();
             }
@@ -116,7 +130,7 @@ namespace AmazoomDebug
             Task orderCheck = Task.Run(() => OrderListener(database));
 
             // Check for truck loading
-            Task shippingCheck = Task.Run(() => ShippingTruckVerification(database));
+            Task shippingCheck = Task.Run(() => ShippingVerificationV2(database));
             
             //and unloading from the shipping and inventory trucks
 
@@ -446,7 +460,118 @@ namespace AmazoomDebug
 
         public static void AddToTruck(Jobs toTruck)
         {
-            LoadedToTruck.Add(toTruck);
+            LoadedToTruck.Enqueue(toTruck);
+        }
+
+
+        private static void ShippingVerificationV2(FirestoreDb database)
+        {
+            while (true)
+            {
+                csem.Wait();
+
+                dockTimer.Start();
+                Console.WriteLine(dockTimer.ElapsedMilliseconds);
+
+                LoadedToTruck.TryPeek(out Jobs currentJob);
+                if((carryWeight - currentJob.ProdId.Weight >= 0 && carryVol - currentJob.ProdId.Volume >= 0))
+                {
+                    carryWeight -= currentJob.ProdId.Weight;
+                    carryVol -= currentJob.ProdId.Volume;
+
+                    Console.WriteLine("Allow loading.");
+
+                    waitForShip.Add(currentJob.ProdId);
+                }
+                else if (dockTimer.ElapsedMilliseconds >= 5000)
+                {
+                    // Ship the truck
+                    int truckId = 1;
+                    foreach(var truckAvail in shippingTrucks)
+                    {
+                        if (truckAvail)
+                        {
+                            waitForShip.Clear();
+                            carryVol = TruckCapacityVol;
+                            carryWeight = TruckCapacityWeight;
+
+                            Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);
+                            break;
+                        }
+                        truckId++;
+                    }
+
+                    foreach (var item in waitForShip)
+                    {
+                        Console.WriteLine("items that are loaded and ready to ship: " + item.ProductName + " to truck " + truckId);
+                    }
+
+                    shippingTrucks[truckId - 1] = !shippingTrucks[truckId - 1];
+
+                    Task.Run(() => 
+                    {
+                        Random simulatedDeliveryTime = new Random();
+                        int resetTime = simulatedDeliveryTime.Next(3000, 7000);
+
+                        Thread.Sleep(resetTime);
+                        Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);
+
+                        shippingTrucks[truckId - 1] = true;
+                    });
+                }
+
+                // perform check against LocalOrder, gotta lock thread safe
+                addingOrder.WaitOne();
+                foreach(var loadedProduct in LoadedToTruck)
+                {
+                    string partialOrderId = loadedProduct.OrderId;
+                    Products partialProduct = loadedProduct.ProdId;
+
+                    foreach (var completeOrder in LocalOrders)
+                    {
+                        if (currentJob.OrderId == completeOrder.OrderId)
+                        {
+                            if (completeOrder.Ordered.Contains(partialProduct))
+                            {
+                                // add new key value to dictionary, if key: orderId and value: product count == product count in actual order, then set status to true
+                                if (partialOrders.ContainsKey(completeOrder.OrderId))
+                                {
+                                    partialOrders[completeOrder.OrderId]--;
+                                }
+                                else
+                                {
+                                    partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
+                                }
+                                completeOrder.Ordered.Remove(partialProduct);
+                                break;
+                            }
+                        }
+                    }
+                }
+                addingOrder.ReleaseMutex();
+            
+
+                foreach (var pair in partialOrders)
+                {
+                    for (int i = 0; i < LocalOrders.Count; i++)
+                    {
+                        int emptyCount = 0;
+
+                        if (pair.Key == LocalOrders[i].OrderId && pair.Value == emptyCount)
+                        {
+                            DocumentReference updateOrderStatus = database.Collection("User Orders").Document(LocalOrders[i].OrderId);
+                            Dictionary<string, Object> toggleOrderStatus = new Dictionary<string, Object>();
+                            toggleOrderStatus.Add("isShipped", true);
+
+                            updateOrderStatus.UpdateAsync(toggleOrderStatus);
+                            LocalOrders.RemoveAt(i);
+                            break;
+                        }
+                    }
+                }
+
+                psem.Release();
+            }
         }
 
         /// <summary>

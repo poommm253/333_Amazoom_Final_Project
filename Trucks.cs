@@ -9,8 +9,8 @@ namespace AmazoomDebug
     class Trucks
     {
         
-        private int truckVol = Warehouse.TruckCapacityVol;
-        private int truckWeight = Warehouse.TruckCapacityWeight;
+        private double truckVol = Warehouse.TruckCapacityVol;
+        private double truckWeight = Warehouse.TruckCapacityWeight;
         public bool IsAvailable { get; set; } = true;
         public string TruckId { get; set; }
         public List<Products> ItemInTruck { get; set; } = new List<Products>();

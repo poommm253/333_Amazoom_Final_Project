@@ -47,7 +47,7 @@ namespace AmazoomDebug
                 else
                 {
                     Thread.Sleep(2000);    // wait 2 seconds to recheck for jobs
-                    Console.WriteLine("Waiting for more jobs");
+                    //Console.WriteLine("Waiting for more jobs");
 
                     // Try to go back and recharge, break the movement loop if a new job has been added
 
@@ -135,7 +135,8 @@ namespace AmazoomDebug
         {
             Movement(Warehouse.LoadingDockRow);
             carryingCapacity = Warehouse.RobotCapacity;    // load everything to the shipping truck
-            
+
+            Warehouse.psem.Wait();
             foreach(var goingToLoad in CarryingItem)
             {
                 Warehouse.AddToTruck(goingToLoad);
@@ -144,6 +145,7 @@ namespace AmazoomDebug
             {
                 Console.WriteLine(element.ProdId.ProductName);
             }
+            Warehouse.csem.Release();
 
             CarryingItem.Clear();
 
