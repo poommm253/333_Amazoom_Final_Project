@@ -468,10 +468,6 @@ namespace AmazoomDebug
         {
             while (true)
             {
-                //csem.Wait();
-
-                dockTimer.Start();
-                //Console.WriteLine(dockTimer.ElapsedMilliseconds);
                 // perform check against LocalOrder, gotta lock thread safe
                 addingOrder.WaitOne();
                 foreach (var loadedProduct in LoadedToTruck)
@@ -522,7 +518,9 @@ namespace AmazoomDebug
                     }
                 }
 
-                if (LoadedToTruck.TryDequeue(out Jobs currentJob) || waitForShip.Count != 0)
+                dockTimer.Start();
+
+                if (LoadedToTruck.TryDequeue(out Jobs currentJob))
                 {
                     if(currentJob != null)
                     {
@@ -538,6 +536,9 @@ namespace AmazoomDebug
                     }
                     else if (dockTimer.ElapsedMilliseconds >= 5000)
                     {
+                        Console.WriteLine("Time elapsed: " + dockTimer.ElapsedMilliseconds);
+                        dockTimer.Reset();
+
                         // Ship the truck
                         int truckId = 1;
                         foreach (var truckAvail in shippingTrucks)
@@ -584,76 +585,7 @@ namespace AmazoomDebug
                 {
                     Thread.Sleep(5000);
                 }
-
-                //psem.Release();
             }
         }
-
-        /// <summary>
-        /// Perform all final checks before shipping; truck weight and volume limitation; toggling Order status if all Products from that order is loaded
-        /// </summary>
-        /*private static void ShippingTruckVerification(FirestoreDb database)
-        {
-            // check order id from the job and stores it and count the number of products in that order
-            while (true)
-            {
-                if(LoadedToTruck.Count != 0)
-                {
-                    foreach(var loadedProduct in LoadedToTruck)    // something is modified inside the loop ERROR!
-                    {
-                        string partialOrderId = loadedProduct.OrderId;
-                        Products partialProduct = loadedProduct.ProdId;
-
-                        // perform check against LocalOrder, gotta lock thread safe
-                        addingOrder.WaitOne();
-                        foreach(var completeOrder in LocalOrders)
-                        {
-                            if (partialOrderId == completeOrder.OrderId)
-                            {
-                                if (completeOrder.Ordered.Contains(partialProduct))
-                                {
-                                    // add new key value to dictionary, if key: orderId and value: product count == product count in actual order, then set status to true
-                                    if (partialOrders.ContainsKey(completeOrder.OrderId))
-                                    {
-                                        partialOrders[completeOrder.OrderId]--;
-                                    }
-                                    else
-                                    {
-                                        partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
-                                    }
-                                    completeOrder.Ordered.Remove(partialProduct);
-                                    break;
-                                }
-                            }
-                        }
-                        addingOrder.ReleaseMutex();
-                    }
-
-                    foreach(var pair in partialOrders)
-                    {                        
-                        for(int i = 0; i < LocalOrders.Count; i++)
-                        {
-                            int emptyCount = 0;
-
-                            if (pair.Key == LocalOrders[i].OrderId && pair.Value == emptyCount)
-                            {
-                                DocumentReference updateOrderStatus = database.Collection("User Orders").Document(LocalOrders[i].OrderId);
-                                Dictionary<string, Object> toggleOrderStatus = new Dictionary<string, Object>();
-                                toggleOrderStatus.Add("isShipped", true);
-
-                                updateOrderStatus.UpdateAsync(toggleOrderStatus);
-                                LocalOrders.RemoveAt(i);
-                                break;
-                            }
-                        }                        
-                    }
-                }
-                else
-                {
-                    Thread.Sleep(5000);
-                    Console.WriteLine("All orders completed.");
-                }
-            }
-        }*/
     }
 }
