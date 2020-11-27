@@ -66,19 +66,22 @@ namespace AmazoomDebug
                         Warehouse.LoadedToTruck.TryDequeue(out Jobs current);
                         if (LoadProduct(current.ProdId) == false)
                         {
+                            IsAvailable = false;
                             break;
                         }
                     }
-
-                    Thread.Sleep(5000);
-                    IsAvailable = false;
-
+                    
+                    if(IsAvailable == true)
+                    {
+                        Thread.Sleep(5000);
+                        IsAvailable = false;
+                    }
+                    
                     Warehouse.waitDocking.Release();
 
                     Console.WriteLine("{0} leaving...", TruckId);
                     NotifyArrival();
                     IsAvailable = true;
-
                 }
 
             }
