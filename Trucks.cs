@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Text;
@@ -8,14 +9,12 @@ namespace AmazoomDebug
 {
     class Trucks
     {
-        
         private double truckVol = Warehouse.TruckCapacityVol;
         private double truckWeight = Warehouse.TruckCapacityWeight;
         private static double carryVol = 0;
         private static double carryWeight = 0;
         public bool IsAvailable { get; set; } = true;
         public string TruckId { get; set; }
-        public List<Products> ItemInTruck { get; set; } = new List<Products>();
 
         public Trucks (string id)
         {
@@ -26,11 +25,11 @@ namespace AmazoomDebug
         {
             if (IsAvailable)
             {
-                if(carryVol + toLoad.Volume <= truckVol && carryVol + toLoad.Weight <= carryWeight)
+                if(carryVol + toLoad.Volume <= truckVol && carryWeight + toLoad.Weight <= truckWeight)
                 {
                     carryVol += toLoad.Volume;
                     carryWeight += toLoad.Weight;
-
+                    Console.WriteLine("{0} is loaded to {1}", toLoad.ProductName, TruckId);
                     return true;
                 }
             }
@@ -47,33 +46,70 @@ namespace AmazoomDebug
 
     class ShippingTruck : Trucks
     {
+        public ConcurrentQueue<Products> itemsLoaded = new ConcurrentQueue<Products>();
         public ShippingTruck(string id): base(id) { }
+        
         public void Deploy()
         {
             while (true)
             {
-                if (IsAvailable == true)
+                Warehouse.dockLocking.Wait();
+
+                if (IsAvailable)
                 {
-                    Thread.Sleep(10000);    // sleep stand by time
-                    IsAvailable = !IsAvailable;
-                }
-                else
-                {
+                    Console.WriteLine("{0} waiting...", TruckId);
+
+                    int loadCount = Warehouse.LoadedToTruck.Count;
+
+                    for (int i = 0; i < loadCount; i++)
+                    {
+                        Warehouse.LoadedToTruck.TryDequeue(out Jobs current);
+                        if (LoadProduct(current.ProdId) == false)
+                        {
+                            break;
+                        }
+                    }
+
+                    Thread.Sleep(5000);
+                    IsAvailable = false;
+
+                    Warehouse.waitDocking.Release();
+
+                    Console.WriteLine("{0} leaving...", TruckId);
                     NotifyArrival();
-                    IsAvailable = !IsAvailable;
+                    IsAvailable = true;
+
                 }
+
             }
         }
     }
 
     class InventoryTruck : Trucks
     {
+        public List<Products> ItemInTruck { get; set; } = new List<Products>();
+
         public InventoryTruck(string id) : base(id) { }
 
         public void Deploy()
         {
             while (true)
             {
+                Warehouse.dockLocking.Wait();
+                if (IsAvailable)
+                {
+                    while(ItemInTruck.Count != 0)
+                    {
+                        continue;
+                    }
+                    IsAvailable = false;
+                }
+                else
+                {
+                    NotifyArrival();
+                    IsAvailable = true;
+                }
+                Warehouse.dockLocking.Release();
             }
         }
     }

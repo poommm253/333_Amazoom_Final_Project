@@ -17,8 +17,9 @@ namespace AmazoomDebug
     class Warehouse
     {
         public static Mutex addingOrder = new Mutex();
-        public static SemaphoreSlim dockLocking = new SemaphoreSlim(4);
-        
+        public static SemaphoreSlim dockLocking = new SemaphoreSlim(0);
+        public static SemaphoreSlim waitDocking = new SemaphoreSlim(0);
+
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
@@ -129,7 +130,7 @@ namespace AmazoomDebug
 
             // Check for truck loading
             Task shippingCheck = Task.Run(() => ShippingVerificationV2(database));
-            Task restockingCheck = Task.Run(() => RestockingVerification(database));
+            Task restockingCheck = Task.Run(() => LoadingToTruck());
             //and unloading from the shipping and inventory trucks
 
 
@@ -515,8 +516,7 @@ namespace AmazoomDebug
                         }
                     }
                 }
-
-
+                
 
 
 
@@ -604,7 +604,33 @@ namespace AmazoomDebug
                 }*/
             }
         }
+        private void LoadingToTruck()
+        {
+            while (true)
+            {
+                dockLocking.Release();
 
+
+                waitDocking.Wait();
+                
+                foreach (var dockedTrucks in operationalShippingTrucks)
+                {
+                    if (dockedTrucks.IsAvailable)
+                    {
+                        int loadCount = LoadedToTruck.Count;
+
+                        for(int i = 0; i < loadCount; i++)
+                        {
+                            LoadedToTruck.TryDequeue(out Jobs current);
+                            if(dockedTrucks.LoadProduct(current.ProdId) == false)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }   
+        }
         private void RestockingVerification(FirestoreDb database)
         {
             Query checkStock = database.Collection("All products");
