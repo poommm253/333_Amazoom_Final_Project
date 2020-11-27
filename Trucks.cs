@@ -38,7 +38,7 @@ namespace AmazoomDebug
         protected void NotifyArrival()
         {
             Random simulatedDeliveryTime = new Random();
-            int resetTime = simulatedDeliveryTime.Next(5000, 10000);    // randomize a time between 5 sec and 10 sec for a full cycle travel
+            int resetTime = simulatedDeliveryTime.Next(3000, 5000);    // randomize a time between 5 sec and 10 sec for a full cycle travel
 
             Thread.Sleep(resetTime);    // Simulate a random travel time for each truck to leave and return to the warehouse
         }
@@ -54,10 +54,11 @@ namespace AmazoomDebug
             while (true)
             {
                 Warehouse.dockLocking.Wait();
+                Console.WriteLine("IsAvailable: " + IsAvailable + " TruckID: " + TruckId);
 
                 if (IsAvailable)
                 {
-                    Console.WriteLine("{0} waiting...", TruckId);
+                    Console.WriteLine("{0} waiting.................................", TruckId);
 
                     int loadCount = Warehouse.LoadedToTruck.Count;
 
@@ -70,20 +71,20 @@ namespace AmazoomDebug
                             break;
                         }
                     }
-                    
-                    if(IsAvailable == true)
+
+                    if (IsAvailable == true)
                     {
                         Thread.Sleep(5000);
                         IsAvailable = false;
                     }
-                    
-                    Warehouse.waitDocking.Release();
 
-                    Console.WriteLine("{0} leaving...", TruckId);
+                    Warehouse.waitDocking.Release();
+                    Console.WriteLine("Truck relasing dock");
+
+                    Console.WriteLine("{0} leaving...................................", TruckId);
                     NotifyArrival();
                     IsAvailable = true;
                 }
-
             }
         }
     }
@@ -91,7 +92,6 @@ namespace AmazoomDebug
     class InventoryTruck : Trucks
     {
         public List<Products> ItemInTruck { get; set; } = new List<Products>();
-
         public InventoryTruck(string id) : base(id) { }
 
         public void Deploy()
@@ -101,18 +101,17 @@ namespace AmazoomDebug
                 Warehouse.dockLocking.Wait();
                 if (IsAvailable)
                 {
-                    while(ItemInTruck.Count != 0)
+                    /*while (ItemInTruck.Count != 0)
                     {
                         continue;
-                    }
+                    }*/
                     IsAvailable = false;
-                }
-                else
-                {
+
+                    Warehouse.dockLocking.Release();
+
                     NotifyArrival();
                     IsAvailable = true;
                 }
-                Warehouse.dockLocking.Release();
             }
         }
     }

@@ -210,6 +210,7 @@ namespace AmazoomDebug
             Dictionary<string, Object> update = new Dictionary<string, Object>();
             string currentPos = Sector.Row + " " + Sector.Column + " " + Sector.Shelf;
             update.Add("coordinate", currentPos);
+            update.Add("battery", Battery.BatteryLevel.ToString());
 
             await updatePos.UpdateAsync(update);    // Sending coordinate updates to Cloud Firestore
         }

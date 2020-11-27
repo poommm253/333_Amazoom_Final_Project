@@ -8,6 +8,7 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 
 namespace AmazoomDebug
 {
@@ -96,7 +97,7 @@ namespace AmazoomDebug
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
 
             InstantiateRobots(database).Wait();
-            InstantiateTrucks(4, 2);
+            InstantiateTrucks(2, 1);
             FetchData(database).Wait();
 
             // Deploying robots
@@ -135,7 +136,6 @@ namespace AmazoomDebug
 
             // Automatic low stock alert
             Task restockingCheck = Task.Run(() => RestockingVerification(database));
-
 
             // Wait all
             Task.WaitAll(robots);
@@ -247,19 +247,6 @@ namespace AmazoomDebug
 
                             isOccupied.Add(fetched);
                         }
-
-                        // pharsing the coordinate and creating a list of Coordinate classes from Cloud Firestore
-                        /*int stock = 0;
-                        for (int i = 0; i< Convert.ToInt32(prodDetail["inStock"]); i++)
-                        {
-                            string key = "coordinate" + stock;
-                            string[] assign = prodDetail[key].ToString().Split();
-
-                            // Row, Column
-                            Coordinate add = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
-
-                            assignCoord.Add(add);
-                        }*/
                         
                         // Creating Product object for all of the documents on Cloud Firestore
                         AllProducts.Add(new Products(
@@ -272,21 +259,9 @@ namespace AmazoomDebug
                             Convert.ToDouble(prodDetail["price"])));
 
                     }
-
-                    // Initializing the List isEmpty and isOccupied
-                    foreach(var emptyShelf in accessibleLocations)
-                    {
-                        if (isOccupied.Contains(emptyShelf))
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            isEmpty.Add(emptyShelf);
-                        }
-                    }
-
                     Console.WriteLine("Products fetched sucessfully.");
+
+                    isEmpty = accessibleLocations.Except(isOccupied).ToList();
 
                     foreach (var element in AllProducts)
                     {
@@ -348,18 +323,6 @@ namespace AmazoomDebug
                 foreach (var prod in initialProducts)
                 {
                     Dictionary<string, Object> conversion = new Dictionary<string, object>();
-
-                    //Dictionary<string, string> test =(Dictionary<string,string>)conversion["coordinate"];
-                    
-                    /*List<string> coordConversion = prod.CoordToArray();
-
-                    int stock = 0;
-                    foreach (var c in coordConversion)
-                    {
-                        string key = "coordinate" + stock;
-                        conversion.Add(key, c);
-                        stock++;
-                    }*/
                     
                     conversion.Add("coordinate", prod.CoordToArray());
                     conversion.Add("inStock", prod.InStock);
@@ -412,12 +375,14 @@ namespace AmazoomDebug
                                     tempProd.Add(item);
 
                                     //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
-                                    
+
                                     // Decrement stock when order is placed
                                     //item.InStock--;
 
                                     // TODO: Might move to when robot loaded products onto the trucks
                                     // Updating product remaining coordinates
+                                    isEmpty = accessibleLocations.Except(isOccupied).ToList();
+
                                     isEmpty.Add(item.Location[0]);
                                     isOccupied.Remove(item.Location[0]);
                                     item.Location.RemoveAt(0);
@@ -472,7 +437,6 @@ namespace AmazoomDebug
         {
             LoadedToTruck.Enqueue(toTruck);
         }
-
 
         private static async void ShippingVerificationV2(FirestoreDb database)
         {
@@ -607,43 +571,47 @@ namespace AmazoomDebug
             while (true)
             {
                 dockLocking.Release();
-
+                Console.WriteLine("Warehouse releasing dock");
 
                 waitDocking.Wait();
-                
-                foreach (var dockedTrucks in operationalShippingTrucks)
-                {
-                    if (dockedTrucks.IsAvailable)
-                    {
-                        int loadCount = LoadedToTruck.Count;
-
-                        for(int i = 0; i < loadCount; i++)
-                        {
-                            LoadedToTruck.TryDequeue(out Jobs current);
-                            if(dockedTrucks.LoadProduct(current.ProdId) == false)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }   
+                Console.WriteLine("Warehouse waiting for truck to release");
+            }
         }
 
         private void RestockingVerification(FirestoreDb database)
         {
             Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 10);
 
-            FirestoreChangeListener lowStockAlert = checkStock.Listen(alert =>
+            FirestoreChangeListener lowStockAlert = checkStock.Listen(async alert =>
             {
                 foreach(var currentStock in alert.Changes)
                 {
                     Dictionary<string, Object> lowAlertDict = currentStock.Document.ToDictionary();
                     
-                    // Signal Restock and update on Firebase
+                    // Signal Restock and update on Cloud Firestore
                     int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
                     DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
-                    lowAlertDict["inStock"] = quantity;
+                    lowAlertDict["inStock"] = (quantity + 10);
+
+                    await restock.UpdateAsync(lowAlertDict);
+
+                    // Updating the coordinate list locally and on Cloud Firestore
+                    foreach(var allProd in AllProducts)
+                    {
+                        if (allProd.ProductID == currentStock.Document.Id)
+                        {
+                            allProd.Location.Add(isEmpty[0]);
+                            isOccupied.Add(isEmpty[0]);
+                            isEmpty.RemoveAt(0);
+
+                            DocumentReference updateStock = database.Collection("All products").Document(allProd.ProductID);
+                            Dictionary<string, Object> update = new Dictionary<string, object>();
+
+                            update.Add("coordinate", allProd.CoordToArray());
+                            await updateStock.UpdateAsync(update);
+                        }
+                    }
+
                     
                 }
             });
