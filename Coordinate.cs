@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 
 namespace AmazoomDebug
 {
@@ -26,6 +27,24 @@ namespace AmazoomDebug
             string coordniateString = Row + " " + Column + " " + Shelf;
 
             return coordniateString;
+        }
+
+        /// <summary>
+        /// Equals method override to check if the given object is equal to the current object of Coordinate class
+        /// </summary>
+        /// <param name="obj"> object to be check with the current object of Coordinate class</param>
+        /// <returns>Return true if the two are equal as in same row, same column, and same shelf interger values. Return false otherwise.</returns>
+        public override bool Equals(object obj)
+        {
+            return obj is Coordinate coordinate &&
+                   Row == coordinate.Row &&
+                   Column == coordinate.Column &&
+                   Shelf == coordinate.Shelf;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Row, Column, Shelf);
         }
     }
 }

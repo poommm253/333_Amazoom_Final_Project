@@ -10,8 +10,8 @@ namespace AmazoomDebug
     class Robot
     {
         private static SemaphoreSlim avoidCollision = new SemaphoreSlim(1);
-
         private double carryingCapacity = Warehouse.RobotCapacity;    // max carrying weight of 5kg; limited only by weight and not volume
+
         public Battery Battery { get; set; }
         public string RobotId { get; set; }
         public Coordinate Sector { get; set; }
@@ -136,7 +136,6 @@ namespace AmazoomDebug
             Movement(Warehouse.LoadingDockRow);
             carryingCapacity = Warehouse.RobotCapacity;    // load everything to the shipping truck
 
-            //Warehouse.psem.Wait();
             foreach(var goingToLoad in CarryingItem)
             {
                 Warehouse.AddToTruck(goingToLoad);
@@ -145,7 +144,6 @@ namespace AmazoomDebug
             {
                 Console.WriteLine(element.ProdId.ProductName);
             }
-            //Warehouse.csem.Release();
 
             CarryingItem.Clear();
 
@@ -212,6 +210,7 @@ namespace AmazoomDebug
             Dictionary<string, Object> update = new Dictionary<string, Object>();
             string currentPos = Sector.Row + " " + Sector.Column + " " + Sector.Shelf;
             update.Add("coordinate", currentPos);
+            update.Add("battery", Battery.BatteryLevel.ToString());
 
             await updatePos.UpdateAsync(update);    // Sending coordinate updates to Cloud Firestore
         }

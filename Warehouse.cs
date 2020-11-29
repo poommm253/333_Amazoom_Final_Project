@@ -8,6 +8,7 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 
 namespace AmazoomDebug
 {
@@ -16,9 +17,11 @@ namespace AmazoomDebug
     /// </summary>
     class Warehouse
     {
-        public static Mutex addingOrder = new Mutex();
-        public static SemaphoreSlim csem = new SemaphoreSlim(0);
-        public static SemaphoreSlim psem = new SemaphoreSlim(1);
+        private static readonly Object addingOrderLock = new Object();
+        private static readonly Object toggleWarehouseSpaceLock = new Object();
+        public static SemaphoreSlim dockLocking = new SemaphoreSlim(0);
+        public static SemaphoreSlim waitDocking = new SemaphoreSlim(0);
+
         public static int LoadingDockRow { get; set; }
         public static int Rows { get; set; }
         public static int Columns { get; set; }
@@ -37,16 +40,14 @@ namespace AmazoomDebug
         private static List<Coordinate> accessibleLocations = new List<Coordinate>();
 
         private static List<Robot> operationalRobots = new List<Robot>();
+        private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
+        private static List<InventoryTruck> operationalInvTrucks = new List<InventoryTruck>();
 
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
 
-
-        private static Stopwatch dockTimer = new Stopwatch();
-        private static List<Products> waitForShip = new List<Products>();
-        private static List<bool> shippingTrucks = new List<bool>() { true, true };
-        private static double carryVol;
-        private static double carryWeight;
+        private readonly double carryWeight;
+        private readonly double carryVol;
 
         /// <summary>
         /// reads setup file and initializes the warehouse with all the primary global constants
@@ -93,7 +94,7 @@ namespace AmazoomDebug
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
 
             InstantiateRobots(database).Wait();
-
+            InstantiateTrucks(2, 1);
             FetchData(database).Wait();
 
             // Deploying robots
@@ -107,7 +108,7 @@ namespace AmazoomDebug
             }
 
             // Deploying shipping and invertory trucks
-            /*Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
+            Task[] shippingTrucks = new Task[operationalShippingTrucks.Count];
             Task[] inventoryTruck = new Task[operationalShippingTrucks.Count];
 
             int tIndex = 0;
@@ -117,25 +118,28 @@ namespace AmazoomDebug
                 shippingTrucks[sIndex] = Task.Run(() => opShipTruck.Deploy());
                 sIndex++;
             }
-            foreach (var opInvTruck in operationalInventoryTrucks)
+            foreach (var opInvTruck in operationalInvTrucks)
             {
                 inventoryTruck[tIndex] = Task.Run(() => opInvTruck.Deploy());
                 tIndex++;
-            }*/
+            }
 
             // Check for incoming order in the background and assign jobs to the robots all in the background and adding tasks to the robot
             Task orderCheck = Task.Run(() => OrderListener(database));
 
             // Check for truck loading
             Task shippingCheck = Task.Run(() => ShippingVerificationV2(database));
-            Task restockingCheck = Task.Run(() => RestockingVerification(database));
-            //and unloading from the shipping and inventory trucks
+            Task loadToTruck = Task.Run(() => LoadingToTruck());
 
+            // Automatic low stock alert
+            Task restockingCheck = Task.Run(() => RestockingVerification(database));
 
             // Wait all
             Task.WaitAll(robots);
-            //Task.WaitAll(shippingTrucks);
-            //Task.WaitAll(inventoryTruck);
+            Task.WaitAll(shippingTrucks);
+            Task.WaitAll(inventoryTruck);
+            loadToTruck.Wait();
+            restockingCheck.Wait();
             orderCheck.Wait();
             shippingCheck.Wait();
         }
@@ -153,6 +157,18 @@ namespace AmazoomDebug
                         accessibleLocations.Add(generateLayout);
                     }
                 }
+            }
+        }
+
+        private void InstantiateTrucks(int shipQuantity, int invQuantity)
+        {
+            for(int i = 0; i < shipQuantity; i++)
+            {
+                operationalShippingTrucks.Add(new ShippingTruck("ShipTruck_" + i));
+            }
+            for(int i = 0; i < invQuantity; i++)
+            {
+                operationalInvTrucks.Add(new InventoryTruck("InvTruck_" + i));
             }
         }
 
@@ -228,19 +244,6 @@ namespace AmazoomDebug
 
                             isOccupied.Add(fetched);
                         }
-
-                        // pharsing the coordinate and creating a list of Coordinate classes from Cloud Firestore
-                        /*int stock = 0;
-                        for (int i = 0; i< Convert.ToInt32(prodDetail["inStock"]); i++)
-                        {
-                            string key = "coordinate" + stock;
-                            string[] assign = prodDetail[key].ToString().Split();
-
-                            // Row, Column
-                            Coordinate add = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
-
-                            assignCoord.Add(add);
-                        }*/
                         
                         // Creating Product object for all of the documents on Cloud Firestore
                         AllProducts.Add(new Products(
@@ -253,21 +256,13 @@ namespace AmazoomDebug
                             Convert.ToDouble(prodDetail["price"])));
 
                     }
-
-                    // Initializing the List isEmpty and isOccupied
-                    foreach(var emptyShelf in accessibleLocations)
-                    {
-                        if (isOccupied.Contains(emptyShelf))
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            isEmpty.Add(emptyShelf);
-                        }
-                    }
-
                     Console.WriteLine("Products fetched sucessfully.");
+
+                    // checking for empty spots in the warehouse by comparing the isOccupied List to the default accessibleLocations list and take the differences between the two lists
+                    lock (toggleWarehouseSpaceLock)
+                    {
+                        isEmpty = isOccupied.Where(x => !accessibleLocations.Contains(x)).ToList();
+                    }
 
                     foreach (var element in AllProducts)
                     {
@@ -301,20 +296,23 @@ namespace AmazoomDebug
             Random indexRandomizer = new Random();
             int totalIndex = (Rows * Columns * Shelves);
 
-            for (int i = 0; i < totalIndex; i++)
+            lock (toggleWarehouseSpaceLock)
             {
-                int currentIndex = indexRandomizer.Next(totalIndex);
-                isEmpty.Add(accessibleLocations[currentIndex]);
-            }
-
-            // Assigning Products to a random coordinate and update to Cloud Firestore
-            foreach (var element in newProducts)
-            {
-                for (int i = 1; i <= element.InStock; i++)
+                for (int i = 0; i < totalIndex; i++)
                 {
-                    element.Location.Add(isEmpty[0]);
-                    isOccupied.Add(isEmpty[0]);    // Once assigned to a Coordinate, toggle to isOccupied
-                    isEmpty.RemoveAt(0);           // Remove the spot in isEmpty
+                    int currentIndex = indexRandomizer.Next(totalIndex);
+                    isEmpty.Add(accessibleLocations[currentIndex]);
+                }
+
+                // Assigning Products to a random coordinate and update to Cloud Firestore
+                foreach (var element in newProducts)
+                {
+                    for (int i = 1; i <= element.InStock; i++)
+                    {
+                        element.Location.Add(isEmpty[0]);
+                        isOccupied.Add(isEmpty[0]);    // Once assigned to a Coordinate, toggle to isOccupied
+                        isEmpty.RemoveAt(0);           // Remove the spot in isEmpty
+                    }
                 }
             }
             AddProductToFirebase(database, newProducts).Wait();
@@ -329,18 +327,6 @@ namespace AmazoomDebug
                 foreach (var prod in initialProducts)
                 {
                     Dictionary<string, Object> conversion = new Dictionary<string, object>();
-
-                    //Dictionary<string, string> test =(Dictionary<string,string>)conversion["coordinate"];
-                    
-                    /*List<string> coordConversion = prod.CoordToArray();
-
-                    int stock = 0;
-                    foreach (var c in coordConversion)
-                    {
-                        string key = "coordinate" + stock;
-                        conversion.Add(key, c);
-                        stock++;
-                    }*/
                     
                     conversion.Add("coordinate", prod.CoordToArray());
                     conversion.Add("inStock", prod.InStock);
@@ -348,6 +334,7 @@ namespace AmazoomDebug
                     conversion.Add("price", prod.Price);
                     conversion.Add("volume", prod.Volume);
                     conversion.Add("weight", prod.Weight);
+                    conversion.Add("admin restock", 0);
 
                     await addingProd.AddAsync(conversion);
                 }
@@ -364,7 +351,7 @@ namespace AmazoomDebug
         {
             Query incomingOrders = database.Collection("User Orders");
 
-            FirestoreChangeListener notifier = incomingOrders.Listen(orders =>
+            FirestoreChangeListener notifier = incomingOrders.Listen(async orders =>
             {
                 //Console.WriteLine("New order received...");
                 foreach (DocumentChange newOrders in orders.Changes)
@@ -392,36 +379,56 @@ namespace AmazoomDebug
                                     Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
                                     tempProd.Add(item);
 
-                                    //Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
-                                    
+                                    Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
+
                                     // Decrement stock when order is placed
                                     //item.InStock--;
 
                                     // TODO: Might move to when robot loaded products onto the trucks
                                     // Updating product remaining coordinates
-                                    isEmpty.Add(item.Location[0]);
-                                    isOccupied.Remove(item.Location[0]);
-                                    item.Location.RemoveAt(0);
 
+                                    //isEmpty = isOccupied.Where(x => !accessibleLocations.Contains(x)).ToList();
 
-                                    //Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
+                                    lock (toggleWarehouseSpaceLock)
+                                    {
+                                        isEmpty.Add(item.Location[0]);
+                                        isOccupied.Remove(item.Location[0]);
+                                        item.Location.RemoveAt(0);
+                                    }
+                                   
+                                    Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
 
                                     AllJobs.Add(newJob);
-                                    //Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
+                                    Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
 
                                     // Instantiating orders locally
-                                    addingOrder.WaitOne();
-                                    LocalOrders.Add(new Orders(
+                                    //addingOrder.WaitOne();
+                                    
+                                    lock (addingOrderLock)
+                                    {
+                                        LocalOrders.Add(new Orders(
                                         newOrders.Document.Id,
                                         tempProd,
                                         newOrderDetail["user"].ToString(),
                                         Convert.ToBoolean(newOrderDetail["isShipped"])
                                         ));
-                                    addingOrder.ReleaseMutex();
+                                    }
+                                    
+                                    //addingOrder.ReleaseMutex();
 
                                     break;
                                 }
                             }
+                        }
+
+                        // TODO: Used to by at the end of ShippingVerificationV2 method (double check this)
+                        foreach (var allProd in AllProducts)
+                        {
+                            DocumentReference updateStock = database.Collection("All products").Document(allProd.ProductID);
+                            Dictionary<string, Object> update = new Dictionary<string, object>();
+
+                            update.Add("coordinate", allProd.CoordToArray());
+                            await updateStock.UpdateAsync(update);
                         }
 
                         // Assigning Jobs to robots by Column
@@ -438,10 +445,7 @@ namespace AmazoomDebug
 
                         // Removing Jobs that are assigned to a robot
                         AllJobs.Clear();
-
-                        Console.WriteLine("Jobs count: " + AllJobs.Count);
                     }
-                    
                 }
             });
 
@@ -453,41 +457,43 @@ namespace AmazoomDebug
             LoadedToTruck.Enqueue(toTruck);
         }
 
-
-        private static void ShippingVerificationV2(FirestoreDb database)
+        private static async void ShippingVerificationV2(FirestoreDb database)
         {
             while (true)
             {
-                // perform check against LocalOrder, gotta lock thread safe
-                addingOrder.WaitOne();
-                foreach (var loadedProduct in LoadedToTruck)
-                {
-                    string partialOrderId = loadedProduct.OrderId;
-                    Products partialProduct = loadedProduct.ProdId;
+                // perform check against LocalOrder and update to Firebase to notify user when every product in their order is shipped
+                //addingOrder.WaitOne();
 
-                    foreach (var completeOrder in LocalOrders)
+                lock (addingOrderLock)
+                {
+                    foreach (var loadedProduct in LoadedToTruck)
                     {
-                        if (partialOrderId == completeOrder.OrderId)
+                        string partialOrderId = loadedProduct.OrderId;
+                        Products partialProduct = loadedProduct.ProdId;
+
+                        foreach (var completeOrder in LocalOrders)
                         {
-                            if (completeOrder.Ordered.Contains(partialProduct))
+                            if (partialOrderId == completeOrder.OrderId)
                             {
-                                // add new key value to dictionary, if key: orderId and value: product count == product count in actual order, then set status to true
-                                if (partialOrders.ContainsKey(completeOrder.OrderId))
+                                if (completeOrder.Ordered.Contains(partialProduct))
                                 {
-                                    partialOrders[completeOrder.OrderId]--;
+                                    // add new key value to dictionary, if key: orderId and value: product count == product count in actual order, then set status to true
+                                    if (partialOrders.ContainsKey(completeOrder.OrderId))
+                                    {
+                                        partialOrders[completeOrder.OrderId]--;
+                                    }
+                                    else
+                                    {
+                                        partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
+                                    }
+                                    completeOrder.Ordered.Remove(partialProduct);
+                                    break;
                                 }
-                                else
-                                {
-                                    partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
-                                }
-                                completeOrder.Ordered.Remove(partialProduct);
-                                break;
                             }
                         }
                     }
                 }
-                addingOrder.ReleaseMutex();
-
+                //addingOrder.ReleaseMutex();
 
                 foreach (var pair in partialOrders)
                 {
@@ -501,93 +507,66 @@ namespace AmazoomDebug
                             Dictionary<string, Object> toggleOrderStatus = new Dictionary<string, Object>();
                             toggleOrderStatus.Add("isShipped", true);
 
-                            updateOrderStatus.UpdateAsync(toggleOrderStatus);
+                            await updateOrderStatus.UpdateAsync(toggleOrderStatus);
                             LocalOrders.RemoveAt(i);
+
                             break;
                         }
-                    }
-                }
-
-                dockTimer.Start();
-
-                if (LoadedToTruck.TryDequeue(out Jobs currentJob) || waitForShip.Count != 0)
-                {
-                    int truckId = 1;
-                    if (currentJob != null)
-                    {
-                        foreach (var availableTruck in shippingTrucks)
-                        {
-                            if (availableTruck)
-                            {
-                                break;
-                            }
-                            else
-                            {
-                                truckId++;
-                            }
-                        }
-
-                        if ((carryWeight - currentJob.ProdId.Weight >= 0 && carryVol - currentJob.ProdId.Volume >= 0))
-                        {
-                            carryWeight -= currentJob.ProdId.Weight;
-                            carryVol -= currentJob.ProdId.Volume;
-
-                            Console.WriteLine("Allow loading to truck {0}",truckId);    // It worked just the truckId is weird.
-
-                            waitForShip.Add(currentJob.ProdId);
-                        }
-                    }
-                    else if (dockTimer.ElapsedMilliseconds >= 5000)
-                    {
-                        Console.WriteLine("Time warning: " + dockTimer.ElapsedMilliseconds);
-                        dockTimer.Reset();
-
-                        Console.WriteLine("Items in TruckID: ship{0} : ", truckId);    // It worked just the truckId is weird.
-                        foreach (var item in waitForShip)
-                        {
-                            Console.WriteLine(item.ProductName);
-                        }
-
-                        waitForShip.Clear();
-                        carryVol = TruckCapacityVol;
-                        carryWeight = TruckCapacityWeight;
-
-                        Console.WriteLine("TruckID: ship{0} leaving dock...", truckId);     // It worked just the truckId is weird.
-
-                        shippingTrucks[truckId - 1] = !shippingTrucks[truckId - 1];
-
-                        Task.Run(() =>
-                        {
-                            Random simulatedDeliveryTime = new Random();
-                            int resetTime = simulatedDeliveryTime.Next(10000, 20000);
-
-                            Thread.Sleep(resetTime);
-                            Console.WriteLine("TruckID: ship{0} returned to docking station", truckId);     // It worked just the truckId is weird.
-
-                            shippingTrucks[truckId - 1] = true;
-                        });
                     }
                 }
             }
         }
 
+        private void LoadingToTruck()
+        {
+            while (true)
+            {
+                dockLocking.Release();
+                Console.WriteLine("Warehouse releasing dock");
+
+                waitDocking.Wait();
+                Console.WriteLine("Warehouse waiting for truck to release");
+            }
+        }
+
         private void RestockingVerification(FirestoreDb database)
         {
-            Query checkStock = database.Collection("All products");
+            Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 10);
 
-            FirestoreChangeListener lowStockAlert = checkStock.Listen(alert =>
+            FirestoreChangeListener lowStockAlert = checkStock.Listen(async alert =>
             {
                 foreach(var currentStock in alert.Changes)
                 {
                     Dictionary<string, Object> lowAlertDict = currentStock.Document.ToDictionary();
+                    
+                    // Signal Restock and update on Cloud Firestore
+                    int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
+                    DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
+                    lowAlertDict["inStock"] = (quantity + 10);
 
-                    if (Convert.ToInt32(lowAlertDict["inStock"]) == 10)
+                    await restock.UpdateAsync(lowAlertDict);
+
+                    // Updating the coordinate list locally and on Cloud Firestore
+                    foreach(var allProd in AllProducts)
                     {
-                        // Signal Restock and update on Firebase
-                        int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
-                        DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
-                        lowAlertDict["inStock"] = quantity;
+                        if (allProd.ProductID == currentStock.Document.Id)
+                        {
+                            lock (toggleWarehouseSpaceLock)
+                            {
+                                allProd.Location.Add(isEmpty[0]);
+                                isOccupied.Add(isEmpty[0]);
+                                isEmpty.RemoveAt(0);
+                            }    
+
+                            DocumentReference updateStock = database.Collection("All products").Document(allProd.ProductID);
+                            Dictionary<string, Object> update = new Dictionary<string, object>();
+
+                            update.Add("coordinate", allProd.CoordToArray());
+                            await updateStock.UpdateAsync(update);
+                        }
                     }
+
+                    
                 }
             });
             lowStockAlert.ListenerTask.Wait();
