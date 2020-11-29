@@ -16,7 +16,7 @@ namespace AmazoomDebug
         public bool IsAvailable { get; set; } = true;
         public string TruckId { get; set; }
 
-        public Trucks (string id)
+        public Trucks(string id)
         {
             TruckId = id;
         }
@@ -25,7 +25,7 @@ namespace AmazoomDebug
         {
             if (IsAvailable)
             {
-                if(carryVol + toLoad.Volume <= truckVol && carryWeight + toLoad.Weight <= truckWeight)
+                if (carryVol + toLoad.Volume <= truckVol && carryWeight + toLoad.Weight <= truckWeight)
                 {
                     carryVol += toLoad.Volume;
                     carryWeight += toLoad.Weight;
@@ -46,9 +46,8 @@ namespace AmazoomDebug
 
     class ShippingTruck : Trucks
     {
-        public ConcurrentQueue<Products> itemsLoaded = new ConcurrentQueue<Products>();
-        public ShippingTruck(string id): base(id) { }
-        
+        public ShippingTruck(string id) : base(id) { }
+
         public void Deploy()
         {
             while (true)
@@ -67,7 +66,7 @@ namespace AmazoomDebug
                         Warehouse.LoadedToTruck.TryDequeue(out Jobs current);
                         if (LoadProduct(current.ProdId) == false)
                         {
-                            Console.WriteLine("Aleart!!!! TRUCK IS FULL!!!!!!!!!!!!!!!!");
+                            Console.WriteLine("Alert!!!! TRUCK IS FULL!!!!!!!!!!!!!!!!");
                             IsAvailable = false;
                             break;
                         }
@@ -92,26 +91,60 @@ namespace AmazoomDebug
 
     class InventoryTruck : Trucks
     {
-        public List<Products> ItemInTruck { get; set; } = new List<Products>();
+        public ConcurrentQueue<Products> ItemInTruck { get; set; } = new ConcurrentQueue<Products>();
         public InventoryTruck(string id) : base(id) { }
+        public bool IsReady { get; set; } = false;
+
+        private double carryVol = 0;
+        private double carryWeight = 0;
+
+        public void RestockItem(Products restock)
+        {
+            ItemInTruck.Enqueue(restock);
+        }
 
         public void Deploy()
         {
             while (true)
             {
-                Warehouse.dockLocking.Wait();
-                if (IsAvailable)
+                IsReady = false;
+
+                if(Warehouse.RestockItem.Count != 0)
                 {
-                    /*while (ItemInTruck.Count != 0)
+                    // Check truck capacity for restocking
+                    if (IsAvailable)
                     {
-                        continue;
-                    }*/
-                    IsAvailable = false;
+                        int LoadRestockToTruck = Warehouse.RestockItem.Count;
 
-                    Warehouse.dockLocking.Release();
+                        for (int i = 0; i < LoadRestockToTruck; i++)
+                        {
+                            Warehouse.RestockItem.TryDequeue(out Products currentProduct);
+                            if (LoadProduct(currentProduct) == false)
+                            {
+                                Console.WriteLine("Alert!!!! TRUCK IS FULL!!!!!!!!!!!!!!!!");
+                                IsAvailable = false;
+                                break;
+                            }
+                            else
+                            {
+                                ItemInTruck.Enqueue(currentProduct);
+                            }
+                        }
 
-                    NotifyArrival();
-                    IsAvailable = true;
+                        IsReady = true;
+                        Warehouse.dockLocking.Wait();
+
+                        Warehouse.createRestockingJob.Wait();
+
+                        if (ItemInTruck.Count == 0)
+                        {
+                            Warehouse.waitDocking.Release();
+                        }
+                    }
+                }
+                else
+                {
+                    Thread.Sleep(10000);
                 }
             }
         }

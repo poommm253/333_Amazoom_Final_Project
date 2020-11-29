@@ -23,7 +23,6 @@ namespace AmazoomDebug
             RobotId = id;
             Battery = battery;
             Sector = sector;
-            
         }
 
         public void AddJob(Jobs add)
@@ -56,8 +55,6 @@ namespace AmazoomDebug
                         Movement(0);
                         Battery.Charge();
                     }*/
-
-
                 }
             }
         }
