@@ -78,7 +78,7 @@ namespace AmazoomDebug
             // if closestPath is to restock from the loading dock, then restock
             if (path.Item2.Restock)
             {
-                Restock(path);
+                Restock(currentJob);
             }
             // if closestPath is to retrive
             else
@@ -123,9 +123,15 @@ namespace AmazoomDebug
             Console.WriteLine("Release");
         }
 
-        public void Restock((int,Jobs) restockInfo)
+        public void Restock(Jobs restockInfo)
         {
-            // TODO: Random Distribution
+            // Move to inventory truck
+            Movement(Warehouse.LoadingDockRow);
+
+            // Move to destination to restock
+            Movement(restockInfo.RestockCoord.Row);
+            Console.WriteLine("Product Restocked: " + restockInfo.ProdId.ProductName + " " + Sector.Column + " at " + restockInfo.RestockCoord.Row + restockInfo.RestockCoord.Column + restockInfo.RestockCoord.Shelf);
+            JobList.Remove(restockInfo);
         }
 
         public void LoadShipment()
@@ -225,14 +231,22 @@ namespace AmazoomDebug
 
             foreach (var toRetrieve in allJobs)
             {
-                int destination = Math.Abs(toRetrieve.RetrieveCoord.Row - Sector.Row);
-
-                if (destination <= closestPath)
+                // Robot prioritizes restocking over retrieving
+                if (toRetrieve.Restock)
                 {
-                    closestPath = destination;    // find the closest destination
-                    retreval = toRetrieve;
+                    return (-1, toRetrieve);
                 }
-                index++;
+                else
+                {
+                    int destination = Math.Abs(toRetrieve.RetrieveCoord.Row - Sector.Row);
+
+                    if (destination <= closestPath)
+                    {
+                        closestPath = destination;    // find the closest destination
+                        retreval = toRetrieve;
+                    }
+                    index++;
+                }
             }
             return (closestPath, retreval);
         }
