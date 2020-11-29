@@ -10,8 +10,8 @@ namespace AmazoomDebug
     class Robot
     {
         private static SemaphoreSlim avoidCollision = new SemaphoreSlim(1);
-
         private double carryingCapacity = Warehouse.RobotCapacity;    // max carrying weight of 5kg; limited only by weight and not volume
+
         public Battery Battery { get; set; }
         public string RobotId { get; set; }
         public Coordinate Sector { get; set; }

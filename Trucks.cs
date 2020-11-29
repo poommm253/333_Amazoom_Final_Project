@@ -67,6 +67,7 @@ namespace AmazoomDebug
                         Warehouse.LoadedToTruck.TryDequeue(out Jobs current);
                         if (LoadProduct(current.ProdId) == false)
                         {
+                            Console.WriteLine("Aleart!!!! TRUCK IS FULL!!!!!!!!!!!!!!!!");
                             IsAvailable = false;
                             break;
                         }
