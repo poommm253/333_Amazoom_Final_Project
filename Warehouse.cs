@@ -67,7 +67,7 @@ namespace AmazoomDebug
                 Columns = Int32.Parse(keys[1]);                 //8
                 Shelves = Int32.Parse(keys[2]);                 //6
                 RobotCapacity = Int32.Parse(keys[3]);           //30
-                TravelTime = Int32.Parse(keys[4]);              //500
+                TravelTime = Int32.Parse(keys[4]);              //1000
                 LoadingDockRow = Rows + 1;
                 TruckCapacityVol = Int32.Parse(keys[5]);        //10
                 TruckCapacityWeight = Int32.Parse(keys[6]);     //200
@@ -413,7 +413,6 @@ namespace AmazoomDebug
                                         Convert.ToBoolean(newOrderDetail["isShipped"])
                                         ));
                                     }
-                                    
                                     //addingOrder.ReleaseMutex();
 
                                     break;
@@ -531,6 +530,7 @@ namespace AmazoomDebug
 
         private void RestockingVerification(FirestoreDb database)
         {
+            // setting low stock to be 10 and get an aleart for restocking prompt
             Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 10);
 
             FirestoreChangeListener lowStockAlert = checkStock.Listen(async alert =>
@@ -541,6 +541,7 @@ namespace AmazoomDebug
                     
                     // Signal Restock and update on Cloud Firestore
                     int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
+
                     DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
                     lowAlertDict["inStock"] = (quantity + 10);
 
@@ -565,10 +566,9 @@ namespace AmazoomDebug
                             await updateStock.UpdateAsync(update);
                         }
                     }
-
-                    
                 }
             });
+
             lowStockAlert.ListenerTask.Wait();
         }
     }
