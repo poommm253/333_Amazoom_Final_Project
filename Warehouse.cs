@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Google.Cloud.Firestore;
 using System.Threading;
 using System.Linq;
+using System.IO.MemoryMappedFiles;
 
 namespace AmazoomDebug
 {
@@ -151,12 +152,26 @@ namespace AmazoomDebug
             // Instantiate all Coordinate Location inside the warehouse
             for(int row = 1; row <= Rows; row++)
             {
-                for(int col = 1; col <= Columns; col++)
+                for (int col = 1; col <= Columns; col++)
                 {
+                    int rightLeft;
+
+                    if (col == 1 || col == Columns)
+                    {
+                        rightLeft = 2;
+                    }
+                    else
+                    {
+                        rightLeft = 1;
+                    }
+
                     for(int shelf = 1; shelf <= Shelves; shelf++)
                     {
-                        Coordinate generateLayout = new Coordinate(row, col, shelf);
-                        accessibleLocations.Add(generateLayout);
+                        for(; rightLeft <= 2; rightLeft++)
+                        {
+                            Coordinate generateLayout = new Coordinate(row, col, shelf, rightLeft);
+                            accessibleLocations.Add(generateLayout);
+                        }
                     }
                 }
             }
@@ -191,7 +206,7 @@ namespace AmazoomDebug
                     operationalRobots.Add(new Robot(
                         robotInfo.Id,
                         new Battery(Convert.ToInt32(robotDetail["battery"])),
-                        new Coordinate(Convert.ToInt32(fetchedCoordinate[0]), Convert.ToInt32(fetchedCoordinate[1]), Convert.ToInt32(fetchedCoordinate[2]))
+                        new Coordinate(Convert.ToInt32(fetchedCoordinate[0]), Convert.ToInt32(fetchedCoordinate[1]))
                         ));
                 }
                 Console.WriteLine("Robots info fetched sucessfully.");
@@ -240,8 +255,8 @@ namespace AmazoomDebug
                         {
                             string[] assign = coord.ToString().Split(" ");
 
-                            // Row, Column, Shelf
-                            Coordinate fetched = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]));
+                            // Row, Column, Shelf, RightLeft
+                            Coordinate fetched = new Coordinate(Convert.ToInt32(assign[0]), Convert.ToInt32(assign[1]), Convert.ToInt32(assign[2]), Convert.ToInt32(assign[3]));
                             assignCoord.Add(fetched);
 
                             isOccupied.Add(fetched);
@@ -296,7 +311,7 @@ namespace AmazoomDebug
             };
 
             Random indexRandomizer = new Random();
-            int totalIndex = (Rows * Columns * Shelves);
+            int totalIndex = (2 * Rows * Columns * Shelves);
 
             lock (toggleWarehouseSpaceLock)
             {

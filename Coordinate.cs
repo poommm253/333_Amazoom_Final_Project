@@ -16,7 +16,7 @@ namespace AmazoomDebug
         /// <param name="row"> initial row </param>
         /// <param name="column"> initial column; fixed for a robot </param>
         /// <param name="shelf"> initial shelf location, defaults to 0 for a robot </param>
-        public Coordinate(int row, int column, int orientation, int shelf = -1)
+        public Coordinate(int row, int column, int shelf = -1, int orientation = -1)
         {
             Row = row;
             Column = column;
