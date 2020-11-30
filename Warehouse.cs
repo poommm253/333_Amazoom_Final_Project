@@ -154,25 +154,6 @@ namespace AmazoomDebug
             {
                 for (int col = 1; col <= Columns; col++)
                 {
-                    /*int rightLeft;
-                    int orientation;
-
-                    if (col == 1)
-                    {
-                        rightLeft = 1;
-                        orientation = 2;
-                    }
-                    else if (col == Columns)
-                    {
-                        rightLeft = 1;
-                        orientation = 1;
-                    }
-                    else
-                    {
-                        rightLeft = 2;
-                        orientation = 1;
-                    }*/
-
                     for(int shelf = 1; shelf <= Shelves; shelf++)
                     {
                         for(int orientation = 1; orientation <= 2; orientation++)

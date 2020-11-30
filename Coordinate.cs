@@ -8,7 +8,7 @@ namespace AmazoomDebug
         public int Row { get; set; }
         public int Column { get; set; }
         public int Shelf { get; set; }
-        public int RightLeft { get; set; }
+        public int RightLeft { get; set; }    // right = 1 and left = 2
 
         /// <summary>
         /// Constructor for Coordinate class

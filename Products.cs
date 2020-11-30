@@ -41,7 +41,7 @@ namespace AmazoomDebug
 
             foreach (var coord in Location)
             {
-                string temp = coord.Row + " " + coord.Column + " " + coord.Shelf;
+                string temp = coord.Row + " " + coord.Column + " " + coord.Shelf + " " + coord.RightLeft;
 
                 toArray.Add(temp);
             }
