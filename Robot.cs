@@ -11,18 +11,23 @@ namespace AmazoomDebug
     {
         private static SemaphoreSlim avoidCollision = new SemaphoreSlim(1);
         private double carryingCapacity = Warehouse.RobotCapacity;    // max carrying weight of 5kg; limited only by weight and not volume
-
+        private int chargingDockLocation = 0;
         public Battery Battery { get; set; }
         public string RobotId { get; set; }
         public Coordinate Sector { get; set; }
         public List<Jobs> JobList { get; set; } = new List<Jobs>();
         public List<Jobs> CarryingItem { get; set; } = new List<Jobs>();
+        private FirestoreDb database;
 
         public Robot(string id, Battery battery, Coordinate sector)
         {
             RobotId = id;
             Battery = battery;
             Sector = sector;
+
+            string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
+            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
+            database = FirestoreDb.Create("amazoom-c1397");
         }
 
         public void AddJob(Jobs add)
@@ -45,7 +50,10 @@ namespace AmazoomDebug
                 }
                 else
                 {
-                    Thread.Sleep(2000);    // wait 2 seconds to recheck for jobs
+                    // recharge until new job is created
+                    Movement(chargingDockLocation);
+                    Battery.Charge();
+
                     //Console.WriteLine("Waiting for more jobs");
 
                     // Try to go back and recharge, break the movement loop if a new job has been added
@@ -78,7 +86,7 @@ namespace AmazoomDebug
             // if closestPath is to restock from the loading dock, then restock
             if (path.Item2.Restock)
             {
-                Restock(currentJob);
+                Restock(currentJob).Wait();
             }
             // if closestPath is to retrive
             else
@@ -123,14 +131,35 @@ namespace AmazoomDebug
             Console.WriteLine("Release");
         }
 
-        public void Restock(Jobs restockInfo)
+        public async Task Restock(Jobs restockInfo)
         {
             // Move to inventory truck
             Movement(Warehouse.LoadingDockRow);
 
             // Move to destination to restock
             Movement(restockInfo.RestockCoord.Row);
+
             Console.WriteLine("Product Restocked: " + restockInfo.ProdId.ProductName + " " + Sector.Column + " at " + restockInfo.RestockCoord.Row + restockInfo.RestockCoord.Column + restockInfo.RestockCoord.Shelf);
+            Console.WriteLine(RobotId + " restocked complete.");
+
+            foreach(var allProd in Warehouse.AllProducts)
+            {
+                if (allProd.ProductID == restockInfo.ProdId.ProductID)
+                {
+                    allProd.Location.Add(restockInfo.RestockCoord);
+
+                    // Update Cloud Firestore that a new product has been restocked
+                    DocumentReference restock = database.Collection("All products").Document(restockInfo.ProdId.ProductID);
+                    Dictionary<string, Object> lowStockUpdate = new Dictionary<string, object>();
+
+                    // increment inStock by +1 in Cloud Firestore
+                    lowStockUpdate.Add("inStock", FieldValue.Increment(1));
+                    lowStockUpdate.Add("coordinate", allProd.CoordToArray());
+                    await restock.UpdateAsync(lowStockUpdate);
+
+                    break;
+                }
+            }
             JobList.Remove(restockInfo);
         }
 
@@ -205,10 +234,6 @@ namespace AmazoomDebug
         /// <returns> It is an asynchronous task that must be waited once called </returns>
         private async Task UpdatePositionDB()
         {
-            string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
-            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
-            FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
-
             DocumentReference updatePos = database.Collection("All robot").Document(RobotId);
             Dictionary<string, Object> update = new Dictionary<string, Object>();
             string currentPos = Sector.Row + " " + Sector.Column + " " + Sector.Shelf;

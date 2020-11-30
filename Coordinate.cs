@@ -8,6 +8,7 @@ namespace AmazoomDebug
         public int Row { get; set; }
         public int Column { get; set; }
         public int Shelf { get; set; }
+        public int RightLeft { get; set; }
 
         /// <summary>
         /// Constructor for Coordinate class
@@ -15,16 +16,17 @@ namespace AmazoomDebug
         /// <param name="row"> initial row </param>
         /// <param name="column"> initial column; fixed for a robot </param>
         /// <param name="shelf"> initial shelf location, defaults to 0 for a robot </param>
-        public Coordinate(int row, int column, int shelf = -1)
+        public Coordinate(int row, int column, int orientation, int shelf = -1)
         {
             Row = row;
             Column = column;
             Shelf = shelf;
+            RightLeft = orientation;
         }
 
         public string CoordToString()
         {
-            string coordniateString = Row + " " + Column + " " + Shelf;
+            string coordniateString = Row + " " + Column + " " + Shelf + " " + RightLeft;
 
             return coordniateString;
         }
@@ -39,12 +41,13 @@ namespace AmazoomDebug
             return obj is Coordinate coordinate &&
                    Row == coordinate.Row &&
                    Column == coordinate.Column &&
-                   Shelf == coordinate.Shelf;
+                   Shelf == coordinate.Shelf &&
+                   RightLeft == coordinate.RightLeft;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(Row, Column, Shelf);
+            return HashCode.Combine(Row, Column, Shelf, RightLeft);
         }
     }
 }

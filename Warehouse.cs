@@ -595,6 +595,10 @@ namespace AmazoomDebug
                         }
                     }
 
+                    invTruckLoading.Release();
+
+                    // add another lock for second inverntory truck before releasing invTruckLoading.Release() again
+
                     // Update on Cloud Firestore
                     DocumentReference restock = database.Collection("All products").Document(currentStock.Document.Id);
                     Dictionary<string, Object> lowStockUpdate = new Dictionary<string, object>();

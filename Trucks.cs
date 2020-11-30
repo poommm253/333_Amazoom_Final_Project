@@ -107,6 +107,8 @@ namespace AmazoomDebug
         {
             while (true)
             {
+                Warehouse.invTruckLoading.Wait();
+
                 IsReady = false;
 
                 if(Warehouse.RestockItem.Count != 0)
