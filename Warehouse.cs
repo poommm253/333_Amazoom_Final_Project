@@ -154,22 +154,30 @@ namespace AmazoomDebug
             {
                 for (int col = 1; col <= Columns; col++)
                 {
-                    int rightLeft;
+                    /*int rightLeft;
+                    int orientation;
 
-                    if (col == 1 || col == Columns)
+                    if (col == 1)
                     {
-                        rightLeft = 2;
+                        rightLeft = 1;
+                        orientation = 2;
+                    }
+                    else if (col == Columns)
+                    {
+                        rightLeft = 1;
+                        orientation = 1;
                     }
                     else
                     {
-                        rightLeft = 1;
-                    }
+                        rightLeft = 2;
+                        orientation = 1;
+                    }*/
 
                     for(int shelf = 1; shelf <= Shelves; shelf++)
                     {
-                        for(; rightLeft <= 2; rightLeft++)
+                        for(int orientation = 1; orientation <= 2; orientation++)
                         {
-                            Coordinate generateLayout = new Coordinate(row, col, shelf, rightLeft);
+                            Coordinate generateLayout = new Coordinate(row, col, shelf, orientation);
                             accessibleLocations.Add(generateLayout);
                         }
                     }
@@ -302,12 +310,12 @@ namespace AmazoomDebug
             // Add new products if no data on Cloud Firestore
             List<Products> newProducts = new List<Products>()
             {
-                new Products("TV", "1", 12.0, 0.373, 40, 5999.0),
-                new Products("Sofa", "2", 30.0, 1.293, 40, 1250.0),
-                new Products("Book", "3", 0.2, 0.005, 40, 12.0),
-                new Products("Desk", "4", 22.1, 1.1, 40, 70.0),
-                new Products("Phone", "5", 0.6, 0.001, 40, 1299.0),
-                new Products("Bed", "6", 15, 0.73, 40, 199.0),
+                new Products("TV", "1", 12.0, 0.373, 80, 5999.0),
+                new Products("Sofa", "2", 30.0, 1.293, 80, 1250.0),
+                new Products("Book", "3", 0.2, 0.005, 80, 12.0),
+                new Products("Desk", "4", 22.1, 1.1, 80, 70.0),
+                new Products("Phone", "5", 0.6, 0.001, 80, 1299.0),
+                new Products("Bed", "6", 15, 0.73, 80, 199.0),
             };
 
             Random indexRandomizer = new Random();
@@ -396,7 +404,7 @@ namespace AmazoomDebug
                                     Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
                                     tempProd.Add(item);
 
-                                    Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf);
+                                    Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf + item.Location[0].RightLeft);
 
                                     // Decrement stock when order is placed
                                     //item.InStock--;
@@ -413,14 +421,14 @@ namespace AmazoomDebug
                                         item.Location.RemoveAt(0);
                                     }
                                    
-                                    Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf);
+                                    Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf + item.Location[0].RightLeft);
 
                                     // TODO: LOCK AllJobs
                                     lock (addingJobs)
                                     {
                                         AllJobs.Add(newJob);
                                     }
-                                    Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
+                                    Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + item.Location[0].RightLeft + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
 
                                     // Instantiating orders locally
                                     //addingOrder.WaitOne();

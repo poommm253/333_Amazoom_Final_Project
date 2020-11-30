@@ -66,7 +66,7 @@ namespace AmazoomDebug
             double chargeTime = (100 - BatteryLevel)/(chargeRate);
             Thread.Sleep(Convert.ToInt32(chargeTime));
             BatteryLevel = 100;
-            Console.WriteLine("Battery Recharged: " + BatteryLevel);
+            //Console.WriteLine("Battery Recharged: " + BatteryLevel);
 
             //===== Previous Version; Time Dependent =====//
 
