@@ -17,42 +17,5 @@ namespace AmazoomDebug
             UserId = userId;
             IsShipped = status;
         }
-
-        public Orders(string id, string userId, bool status)
-        {
-            OrderId = id;
-            UserId = userId;
-            IsShipped = status;
-        }
-
-        public double GetTotalWeight()
-        {
-            double weight = 0;
-
-            foreach (var product in this.Ordered)
-            {
-                weight += product.Weight;
-            }
-
-            return weight;
-        }
-
-        public double GetTotalVolume()
-        {
-            double volume = 0;
-
-            foreach (var product in this.Ordered)
-            {
-                volume += product.Volume;
-            }
-
-            return volume;
-        }
-
-        public void FetchOrders()
-        {
-            // connect to firebase and fetch order
-            // ordered = fetchedOrder from firebase
-        }
     }
 }

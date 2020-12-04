@@ -1,9 +1,10 @@
 ﻿using System;
-using System.Drawing;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace AmazoomDebug
 {
-    class Coordinate
+    public class Coordinate : IEquatable<Coordinate>
     {
         public int Row { get; set; }
         public int Column { get; set; }
@@ -31,23 +32,44 @@ namespace AmazoomDebug
             return coordniateString;
         }
 
+        public override bool Equals(object compareTo)
+        {
+            if (compareTo == null)
+            {
+                return false;
+            }
+
+            Coordinate convert = (Coordinate)compareTo;
+            if (convert == null)
+            {
+                return false;
+            }
+            else
+            {
+                return Equals(convert);
+            }
+        }
+
+        public override int GetHashCode()
+        {
+            return Row + Column + Shelf + RightLeft;
+        }
+
+        public bool Equals(Coordinate other)
+        {
+            if (other == null)
+            {
+                return false;
+            }
+
+            return (this.Row.Equals(other.Row) && this.Column.Equals(other.Column) && this.Shelf.Equals(other.Shelf) && this.RightLeft.Equals(other.RightLeft));
+        }
+
         /// <summary>
         /// Equals method override to check if the given object is equal to the current object of Coordinate class
         /// </summary>
         /// <param name="obj"> object to be check with the current object of Coordinate class</param>
         /// <returns>Return true if the two are equal as in same row, same column, and same shelf interger values. Return false otherwise.</returns>
-        public override bool Equals(object obj)
-        {
-            return obj is Coordinate coordinate &&
-                   Row == coordinate.Row &&
-                   Column == coordinate.Column &&
-                   Shelf == coordinate.Shelf &&
-                   RightLeft == coordinate.RightLeft;
-        }
 
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(Row, Column, Shelf, RightLeft);
-        }
     }
 }

@@ -44,9 +44,6 @@ namespace AmazoomDebug
                 {
                     // TODO: need to further check if the job is a retrieve or a restock
                     Retrieve();
-
-                    // TODO: Update Location onto Firebase
-
                 }
                 else
                 {
@@ -54,15 +51,7 @@ namespace AmazoomDebug
                     Movement(chargingDockLocation);
                     Battery.Charge();
 
-                    //Console.WriteLine("Waiting for more jobs");
-
-                    // Try to go back and recharge, break the movement loop if a new job has been added
-
-                    /*else    // return to charging dock for idle
-                    {
-                        Movement(0);
-                        Battery.Charge();
-                    }*/
+                    Thread.Sleep(5000);
                 }
             }
         }
@@ -73,7 +62,7 @@ namespace AmazoomDebug
         /// Always check distance between next destination and the loading docks, always choose the shortest path if the robot is carrying a product
         /// </summary>
         /// <param name="orderDetail"> List of orders to be retrieved by the robot. Only contain orders that is within the same column the robot is located </param>
-        public void Retrieve()
+        private void Retrieve()
         {
             // Item1: closestPath; Item2: corresponding Job
             var path = ShortestPathCalc(JobList);
@@ -131,10 +120,13 @@ namespace AmazoomDebug
             Console.WriteLine("Release");
         }
 
-        public async Task Restock(Jobs restockInfo)
+        private async Task Restock(Jobs restockInfo)
         {
             // Move to inventory truck
+            Movement(Warehouse.Rows);
+            avoidCollision.Wait();
             Movement(Warehouse.LoadingDockRow);
+            avoidCollision.Release();
 
             // Move to destination to restock
             Movement(restockInfo.RestockCoord.Row);
@@ -163,16 +155,16 @@ namespace AmazoomDebug
             JobList.Remove(restockInfo);
         }
 
-        public void LoadShipment()
+        private void LoadShipment()
         {
             Movement(Warehouse.LoadingDockRow);
             carryingCapacity = Warehouse.RobotCapacity;    // load everything to the shipping truck
 
-            foreach(var goingToLoad in CarryingItem)
+            foreach (var goingToLoad in CarryingItem)
             {
                 Warehouse.AddToTruck(goingToLoad);
             }
-            foreach(var element in Warehouse.LoadedToTruck)
+            foreach (var element in Warehouse.LoadedToTruck)
             {
                 Console.WriteLine(element.ProdId.ProductName);
             }
@@ -192,7 +184,7 @@ namespace AmazoomDebug
         /// If robot has battery of 10%, enter power saving mode and move back to the charging dock at row = 0 and charge
         /// </summary>
         /// <param name="productLocation"> Where the robot will move to (rows) </param>
-        public void Movement(int productLocation)
+        private void Movement(int productLocation)
         {
             int totalUnitMovement = 0;
 
