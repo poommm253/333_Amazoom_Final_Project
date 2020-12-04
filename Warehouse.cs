@@ -362,7 +362,7 @@ namespace AmazoomDebug
                     conversion.Add("price", prod.Price);
                     conversion.Add("volume", prod.Volume);
                     conversion.Add("weight", prod.Weight);
-                    conversion.Add("admin restock", 3);
+                    conversion.Add("admin restock", 80);
 
                     await addingProd.AddAsync(conversion);
                 }
@@ -601,26 +601,35 @@ namespace AmazoomDebug
         private void RestockingVerification(FirestoreDb database)
         {
             // setting low stock to be 10 and get an aleart for restocking prompt
-            Query checkStock = database.Collection("All products").WhereLessThan("inStock", 75);
+            Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 75);
 
-            FirestoreChangeListener lowStockAlert = checkStock.Listen(alert =>
+            FirestoreChangeListener lowStockAlert = checkStock.Listen(async alert =>
             {
                 foreach(var currentStock in alert.Documents)
                 {
                     Dictionary<string, Object> lowAlertDict = currentStock.ToDictionary();
-                    
+
+                    int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
+
                     // Loading product to inventory truck; check weight and volume and creating a truck
-                    foreach(var allProd in AllProducts)
+                    foreach (var allProd in AllProducts)
                     {
                         if(allProd.ProductID.Equals(currentStock.Id))
                         {
-                            int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
 
                             for (int i = 0; i < quantity; i++)
                             {
                                 RestockItem.Enqueue(allProd);
                                 Console.WriteLine("Restock confirmed");
                             }
+
+                            Dictionary<string, Object> updateStock = new Dictionary<string, object>();
+                            updateStock.Add("inStock", quantity);
+
+                            DocumentReference update = database.Collection("All products").Document(currentStock.Id);
+
+                            await update.UpdateAsync(updateStock);
+
                             break;
                         }
                     }
@@ -631,3 +640,12 @@ namespace AmazoomDebug
         }
     }
 }
+
+
+// add another variable on firebase "restock" to work with "inStock"
+
+// step1: "inStock" is used by the user/clients +- tarm add to cart and "restock" will reduce once order is already placed
+// step2: "restock" listen for lower than 75
+// step3: actual restock is going to happen +5 items. Wait for robot to restock at self before increment +5
+// step4: +1 when robot restock
+// step5: 

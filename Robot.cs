@@ -134,6 +134,7 @@ namespace AmazoomDebug
             Console.WriteLine("Product Restocked: " + restockInfo.ProdId.ProductName + " " + Sector.Column + " at " + restockInfo.RestockCoord.Row + restockInfo.RestockCoord.Column + restockInfo.RestockCoord.Shelf);
             Console.WriteLine(RobotId + " restocked complete.");
 
+
             foreach(var allProd in Warehouse.AllProducts)
             {
                 if (allProd.ProductID == restockInfo.ProdId.ProductID)
@@ -145,13 +146,15 @@ namespace AmazoomDebug
                     Dictionary<string, Object> lowStockUpdate = new Dictionary<string, object>();
 
                     // increment inStock by +1 in Cloud Firestore
-                    lowStockUpdate.Add("inStock", FieldValue.Increment(1));
+                    //lowStockUpdate.Add("inStock", FieldValue.Increment(1));
                     lowStockUpdate.Add("coordinate", allProd.CoordToArray());
                     await restock.UpdateAsync(lowStockUpdate);
 
                     break;
                 }
             }
+
+
             JobList.Remove(restockInfo);
         }
 

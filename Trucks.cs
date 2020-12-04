@@ -130,10 +130,10 @@ namespace AmazoomDebug
 
                     Warehouse.createRestockingJob.Wait();
 
-                        
-                    Warehouse.waitDocking.Release();
-                        
-                    
+                    if (ItemInTruck.Count == 0)
+                    {
+                        Warehouse.waitDocking.Release();
+                    }
                 }
                 else
                 {
