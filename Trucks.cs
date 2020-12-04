@@ -127,13 +127,20 @@ namespace AmazoomDebug
 
                     IsReady = true;
                     Warehouse.dockLocking.Wait();
+                    Console.WriteLine("IsAvailable: " + IsAvailable + " TruckID: " + TruckId);
 
                     Warehouse.createRestockingJob.Wait();
 
-                    if (ItemInTruck.Count == 0)
+                    //TODO: Check ItemInTruck.Count loop!!!
+                    while(ItemInTruck.Count != 0)
                     {
-                        Warehouse.waitDocking.Release();
+                        Thread.Sleep(2000);
+                        ItemInTruck.TryDequeue(out Products discard);
+                        Console.WriteLine("One Product Unloaded from inventory truck");
                     }
+
+                    Console.WriteLine("No more item in truck");
+                    Warehouse.waitDocking.Release();
                 }
                 else
                 {

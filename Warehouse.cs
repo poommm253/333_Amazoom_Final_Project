@@ -44,7 +44,7 @@ namespace AmazoomDebug
 
         private static List<Robot> operationalRobots = new List<Robot>();
         private static List<ShippingTruck> operationalShippingTrucks = new List<ShippingTruck>();
-        private static List<InventoryTruck> operationalInvTrucks = new List<InventoryTruck>();
+        public static List<InventoryTruck> operationalInvTrucks = new List<InventoryTruck>();
 
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
@@ -591,10 +591,9 @@ namespace AmazoomDebug
                 }
                 createRestockingJob.Release();
 
+                Console.WriteLine("Stuck waiting for release");
                 waitDocking.Wait();
                 Console.WriteLine("Warehouse waiting for truck to release");
-
-                Thread.Sleep(5000);
              }
         }
 
@@ -610,6 +609,7 @@ namespace AmazoomDebug
                     Dictionary<string, Object> lowAlertDict = currentStock.ToDictionary();
 
                     int quantity = Convert.ToInt32(lowAlertDict["admin restock"]);
+                    int inStock = Convert.ToInt32(lowAlertDict["inStock"]);
 
                     // Loading product to inventory truck; check weight and volume and creating a truck
                     foreach (var allProd in AllProducts)
@@ -617,7 +617,7 @@ namespace AmazoomDebug
                         if(allProd.ProductID.Equals(currentStock.Id))
                         {
 
-                            for (int i = 0; i < quantity; i++)
+                            for (int i = 0; i < Math.Abs(quantity-inStock); i++)
                             {
                                 RestockItem.Enqueue(allProd);
                                 Console.WriteLine("Restock confirmed");
