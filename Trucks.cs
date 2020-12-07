@@ -159,15 +159,10 @@ namespace AmazoomDebug
 
                     Warehouse.createRestockingJob.Wait();
 
-                    //TODO: Check ItemInTruck.Count loop!!!
-                    while(ItemInTruck.Count != 0)
-                    {
-                        Thread.Sleep(2000);
-                        ItemInTruck.TryDequeue(out Products discard);
-                        Console.WriteLine("One Product Unloaded from inventory truck");
-                    }
+                    Thread.Sleep(5000);
+                    Console.WriteLine("Unloaded and inventory truck is leaving");
+                    ItemInTruck.Clear();
 
-                    Console.WriteLine("No more item in truck");
                     Warehouse.waitDocking.Release();
                 }
                 else
