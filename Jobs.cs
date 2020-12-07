@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace AmazoomDebug
+﻿namespace AmazoomDebug
 {
+    /// <summary>
+    /// Jobs containing information about restocking position, retreving position, orderId, and product information
+    /// A job is assigned to individual robots by the warehouse central computer
+    /// </summary>
     class Jobs
     {
         public Products ProdId { get; set; }

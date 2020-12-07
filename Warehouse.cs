@@ -4,14 +4,13 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.Cloud.Firestore;
 using System.Threading;
-using System.Linq;
-using System.IO.MemoryMappedFiles;
-using Newtonsoft.Json.Serialization;
+using System.IO;
 
 namespace AmazoomDebug
 {
     /// <summary>
     /// contains all the global constant for the entire system
+    /// Warehouse central computer system that communicates with the Cloud Firestore, all the robots to assign jobs to, and the trucks going in and out of the warehouse
     /// </summary>
     class Warehouse
     {
@@ -48,49 +47,90 @@ namespace AmazoomDebug
 
         private static Dictionary<string, int> partialOrders = new Dictionary<string, int>();
 
-
         private readonly double carryWeight;
         private readonly double carryVol;
+
         /// <summary>
-        /// reads setup file and initializes the warehouse with all the primary global constants
+        /// Constructor
+        /// Prompts for a PIN code (123123 for the purpose of this demo) and the admin have 3 attempts
+        /// Reads setup file and initializes the warehouse with all the primary global constants when a new Warehouse Object is instantiated
+        /// Ask for admin authentication and file path
         /// </summary>
         public Warehouse()
         {
-            // read file to initialize warehouse
-            System.IO.StreamReader setup = new System.IO.StreamReader("InitializationSetup/Setup_Warehouse.txt");
-            string line = setup.ReadLine();
+            bool loggedIn = false;
 
-            // #rows, #columns, #shelves, robotCapacity, travelTime
-            string[] keys = line.Split(' ');
-
-            try
+            for(int trial = 3; trial > 0; trial--)
             {
-                Rows = Int32.Parse(keys[0]);                    //5
-                Columns = Int32.Parse(keys[1]);                 //8
-                Shelves = Int32.Parse(keys[2]);                 //6
-                RobotCapacity = Int32.Parse(keys[3]);           //30
-                TravelTime = Int32.Parse(keys[4]);              //1000
-                LoadingDockRow = Rows + 1;
-                TruckCapacityVol = Int32.Parse(keys[5]);        //10
-                TruckCapacityWeight = Int32.Parse(keys[6]);     //200
+                Console.WriteLine("Please enter authentication PIN:");
+                int pinCode = Convert.ToInt32(Console.ReadLine());
 
-                carryVol = TruckCapacityVol;
-                carryWeight = TruckCapacityWeight;
+                if (pinCode == 123123)
+                {
+                    Console.WriteLine("PIN Correct");
+                    Console.WriteLine("Enter a file path: (InitializationSetup/Setup_Warehouse.txt)");
+                    string filePath = Console.ReadLine();
 
-                setup.Close();
+                    // read file to initialize warehouse
+                    System.IO.StreamReader setup = new System.IO.StreamReader(filePath);
+                    string line = setup.ReadLine();
+
+                    // #rows, #columns, #shelves, robotCapacity, travelTime
+                    string[] keys = line.Split(' ');
+
+                    // Catch and print an error message if the file is inaccessible
+                    try
+                    {
+                        Rows = Int32.Parse(keys[0]);                    //5
+                        Columns = Int32.Parse(keys[1]);                 //8
+                        Shelves = Int32.Parse(keys[2]);                 //6
+                        RobotCapacity = Int32.Parse(keys[3]);           //30
+                        TravelTime = Int32.Parse(keys[4]);              //1000
+                        LoadingDockRow = Rows + 1;
+                        TruckCapacityVol = Int32.Parse(keys[5]);        //10
+                        TruckCapacityWeight = Int32.Parse(keys[6]);     //200
+
+                        carryVol = TruckCapacityVol;
+                        carryWeight = TruckCapacityWeight;
+
+                        loggedIn = true;
+                        setup.Close();
+
+                        Console.WriteLine("Setup complete!");
+                    }
+                    catch
+                    {
+                        setup.Close();
+                        Console.WriteLine("File not loaded properly and warehouse cannot be instantiated");
+                    }
+                    break;
+                }
+                else
+                {
+                    Console.WriteLine("Wrong PIN. {0} attempts left", trial - 1);
+                }
             }
-            catch
+
+            if (loggedIn == false)
             {
-                setup.Close();
-                Console.WriteLine("File not loaded properly and warehouse cannot be instantiated");
+                Console.WriteLine("Set up failed. Please restart the system");
             }
         }
 
+        /// <summary>
+        /// Generate warehouse layout, robots, trucks, and products location. 
+        /// Product information and location are fetched from Cloud Firestore
+        /// 
+        /// Run 2 threads to listen for updates from Cloud Firestore and are only activated when changes have been made to the database
+        /// Run 1 thread for regulating docking area so only one truck can enter at a time
+        /// Run 1 thread for sending updates of user's orders and its shipping status to Cloud Firestore
+        /// </summary>
         public void Deploy()
         {
             // Initialization of Automated Warehouse
             GenerateLayout();
 
+            // Established a connection to Cloud Firestore with a unique application id
             string path = AppDomain.CurrentDomain.BaseDirectory + @"amazoom-c1397-firebase-adminsdk-ho7z7-6572726fc6.json";
             Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path);
             FirestoreDb database = FirestoreDb.Create("amazoom-c1397");
@@ -147,6 +187,10 @@ namespace AmazoomDebug
             restockingCheck.Wait();
         }
 
+        /// <summary>
+        /// Generate layout based on the given information from the setup file
+        /// Store all accessible coordinates into a list called accessibleLocations
+        /// </summary>
         private void GenerateLayout()
         {
             // Instantiate all Coordinate Location inside the warehouse
@@ -166,6 +210,11 @@ namespace AmazoomDebug
             }
         }
 
+        /// <summary>
+        /// Instantiating shipping and inventory trucks
+        /// </summary>
+        /// <param name="shipQuantity"> number of shipping trucks to be instantiated</param>
+        /// <param name="invQuantity"> number of inventory trucks to be instantiated</param>
         private void InstantiateTrucks(int shipQuantity, int invQuantity)
         {
             for(int i = 0; i < shipQuantity; i++)
@@ -178,8 +227,14 @@ namespace AmazoomDebug
             }
         }
 
+        /// <summary>
+        /// Instantiate equal number of robots as the number of columns in the warehouse. Assign each robot to one column.
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
+        /// <returns> It is an asynchronous task that must be waited once called </returns>
         private async Task InstantiateRobots(FirestoreDb database)
         {
+            // Catch and print errors regarding database connection
             try
             {
                 Console.WriteLine("Robot Instantiation");
@@ -212,6 +267,7 @@ namespace AmazoomDebug
                         operationalRobots.Add(new Robot("AMAZOOM_AW_" + i.ToString(), new Battery(100), new Coordinate(0, i)));
                     }
 
+                    // Updating robots information to Cloud Firestore with a unique id for each robot at 100% battery and starting at the origin
                     int docId = 1;
                     foreach (var robots in operationalRobots)
                     {
@@ -231,16 +287,24 @@ namespace AmazoomDebug
             {
                 Console.WriteLine(error);
             }
-            
         }
 
+        /// <summary>
+        /// Initial fetching of product information from Cloud Firestore
+        /// If there is no information from Cloud Firestore, then the warehouse automatically generate 6 default products and randomly distribute them within the warehouse
+        /// The newly generated products will then be updated to Cloud Firestore
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
+        /// <returns> It is an asynchronous task that must be waited once called </returns>
         private async Task FetchData(FirestoreDb database)
         {
+            // Catch and print errors regarding database connection
             try
             {
                 Query allProducts = database.Collection("All products");
                 QuerySnapshot fetchedData = await allProducts.GetSnapshotAsync();
 
+                // Use product information from Cloud Firestore if they exist
                 if (fetchedData.Count != 0)
                 {
                     foreach(DocumentSnapshot productInfo in fetchedData.Documents)
@@ -250,6 +314,7 @@ namespace AmazoomDebug
                         List<Coordinate> assignCoord = new List<Coordinate>();
                         List<Object> fetchedCoordinates = (List<Object>) prodDetail["coordinate"];
 
+                        // Creating and Storing strings of coordinates from Cloud Firestore as a Coordinate class
                         foreach(var coord in fetchedCoordinates)
                         {
                             string[] assign = coord.ToString().Split(" ");
@@ -291,6 +356,7 @@ namespace AmazoomDebug
                         Console.WriteLine(element.ProductID + " " + element.Location[0].Row + element.Location[0].Column + element.Location[0].Shelf);
                     }
                 }
+                // If no product information is found on Cloud Firestore, the warehouse automatically generate new products
                 else
                 {
                     InitialCoordinateRandomizer(database);    // If and only if the warehouse is initially empty, restock with random distribution
@@ -302,6 +368,10 @@ namespace AmazoomDebug
             }
         }
 
+        /// <summary>
+        /// Randomly distribute and store products within the warehouse. Update Cloud Firestore of each product's location
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
         private void InitialCoordinateRandomizer(FirestoreDb database)
         {
             // Add new products if no data on Cloud Firestore
@@ -316,7 +386,7 @@ namespace AmazoomDebug
             };
 
             Random indexRandomizer = new Random();
-            int totalIndex = (2 * Rows * Columns * Shelves);    // 480
+            int totalIndex = (2 * Rows * Columns * Shelves);    // 480 for this demo
             List<int> usedIndex = new List<int>();
 
             lock (toggleWarehouseSpaceLock)
@@ -337,17 +407,24 @@ namespace AmazoomDebug
                 {
                     for (int i = 1; i <= element.InStock; i++)
                     {
-                        element.Location.Add(isEmpty[0]);
-                        isOccupied.Add(isEmpty[0]);    // Once assigned to a Coordinate, toggle to isOccupied
-                        isEmpty.RemoveAt(0);           // Remove the spot in isEmpty
+                        element.Location.Add(isEmpty[0]);    // Adding a new random coordinate for the product
+                        isOccupied.Add(isEmpty[0]);          // Once assigned to a Coordinate, toggle to isOccupied
+                        isEmpty.RemoveAt(0);                 // Remove the spot in isEmpty
                     }
                 }
             }
-            AddProductToFirebase(database, newProducts).Wait();
+            AddProductToFirebase(database, newProducts).Wait();    // Adding product information to Cloud Firestore
         }
 
+        /// <summary>
+        /// Asynchronously add products information to Cloud Firestore
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
+        /// <param name="initialProducts"> List of products to be added to Cloud Firestore </param>
+        /// <returns> It is an asynchronous task that must be waited once called</returns>
         private async Task AddProductToFirebase(FirestoreDb database, List<Products> initialProducts)
         {
+            // Catch and print errors regarding database connection
             try
             {
                 CollectionReference addingProd = database.Collection("All products");
@@ -356,7 +433,7 @@ namespace AmazoomDebug
                 {
                     Dictionary<string, Object> conversion = new Dictionary<string, object>();
                     
-                    conversion.Add("coordinate", prod.CoordToArray());
+                    conversion.Add("coordinate", prod.CoordToArray());    // storing all the coordinates as a List of strings on Firestore
                     conversion.Add("inStock", prod.InStock);
                     conversion.Add("name", prod.ProductName);
                     conversion.Add("price", prod.Price);
@@ -367,7 +444,6 @@ namespace AmazoomDebug
                     await addingProd.AddAsync(conversion);
                 }
                 Console.WriteLine("Products added to database sucessfully");
-
             }
             catch (Exception error)
             {
@@ -375,20 +451,27 @@ namespace AmazoomDebug
             }
         }
 
+        /// <summary>
+        /// Background listener that only gets activated once there is a change in the "User Orders" collection on Cloud Firestore
+        /// </summary>
+        /// <param name="database"> Firestore database instance</param>
         private void OrderListener(FirestoreDb database)
         {
             Query incomingOrders = database.Collection("User Orders");
 
             FirestoreChangeListener notifier = incomingOrders.Listen(async orders =>
             {
-                //Console.WriteLine("New order received...");
+                // TESTING: that a new order triggers this method and a new order is stored locally: PASSED
+                Console.WriteLine("New order received...");
+
                 foreach (DocumentChange newOrders in orders.Changes)
                 {
                     Dictionary<string, Object> newOrderDetail = newOrders.Document.ToDictionary();
 
                     List<Object> prodInOrder = (List<Object>)newOrderDetail["Items"];
                     List<Products> tempProd = new List<Products>();
-
+                    
+                    // Only locally store incomplete orders in the warehouse central computer to be processed
                     if (Convert.ToBoolean(newOrderDetail["isShipped"]))
                     {
                         continue;
@@ -398,26 +481,20 @@ namespace AmazoomDebug
                         // Create Jobs and Store a copy of Orders locally
                         foreach (var prod in prodInOrder)
                         {
-                            // search id for the corresponding Product
+                            // Search id for the corresponding Product
                             foreach (var item in AllProducts)
                             {
                                 if (prod.ToString() == item.ProductID)
                                 {
                                     Console.WriteLine("Creating jobs...");
 
+                                    // Creating a retrieval job
                                     Jobs newJob = new Jobs(item, newOrders.Document.Id, false, true, item.Location[0], null);
                                     tempProd.Add(item);
 
                                     Console.WriteLine("item Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column+ item.Location[0].Shelf + item.Location[0].RightLeft);
 
-                                    // Decrement stock when order is placed
-                                    //item.InStock--;
-
-                                    // TODO: Might move to when robot loaded products onto the trucks
-                                    // Updating product remaining coordinates
-
-                                    //isEmpty = isOccupied.Where(x => !accessibleLocations.Contains(x)).ToList();
-
+                                    // Updating empty shelves in the warehouse
                                     lock (toggleWarehouseSpaceLock)
                                     {
                                         isEmpty.Add(item.Location[0]);
@@ -427,18 +504,17 @@ namespace AmazoomDebug
                                    
                                     Console.WriteLine("latested Coord: " + item.ProductName + " " + item.Location[0].Row + item.Location[0].Column + item.Location[0].Shelf + item.Location[0].RightLeft);
 
-                                    // TODO: LOCK AllJobs
                                     lock (addingJobs)
                                     {
                                         AllJobs.Add(newJob);
                                     }
+                                    
+                                    // TESTING: to see if new jobs is created. Product name and retrieval coordinate should match with the one on Cloud Firestore: PASSED
                                     Console.WriteLine("New job created sucessfully... " + newJob.ProdId.ProductName + " " + newJob.RetrieveCoord.Row + newJob.RetrieveCoord.Column + newJob.RetrieveCoord.Shelf + item.Location[0].RightLeft + "\nShould be assigned to robot: " + newJob.RetrieveCoord.Column);
 
-                                    // Instantiating orders locally
-                                    //addingOrder.WaitOne();
-                                    
                                     lock (addingOrderLock)
                                     {
+                                        // Instantiating incomplete jobs locally
                                         LocalOrders.Add(new Orders(
                                         newOrders.Document.Id,
                                         tempProd,
@@ -446,14 +522,13 @@ namespace AmazoomDebug
                                         Convert.ToBoolean(newOrderDetail["isShipped"])
                                         ));
                                     }
-                                    //addingOrder.ReleaseMutex();
 
                                     break;
                                 }
                             }
                         }
 
-                        // TODO: Used to by at the end of ShippingVerificationV2 method (double check this)
+                        // Update Cloud Firestore of the latest coordinates for each product. Coordinates should be removed.
                         foreach (var allProd in AllProducts)
                         {
                             DocumentReference updateStock = database.Collection("All products").Document(allProd.ProductID);
@@ -470,29 +545,40 @@ namespace AmazoomDebug
                             {
                                 if (currentJobs.Retrieve)
                                 {
+                                    // TESTING: Check if the right coordinate is assigned to the correct robot by printing out the current coordinate. Robot from that role should receive the job : PASSED
                                     Console.WriteLine("job location: " + currentJobs.RetrieveCoord.Row + currentJobs.RetrieveCoord.Column + currentJobs.RetrieveCoord.Shelf);
 
                                     int toAssign = (currentJobs.RetrieveCoord.Column) - 1;    // calculating product location and the corresponding robot in that columns
 
+                                    // TESTING: Check if the right robot got assigned to the job by printing out the assigned robot and the product name : PASSED
                                     Console.WriteLine("This job is assigned to robot: " + toAssign + " to retrieve " + currentJobs.ProdId.ProductName);
                                     operationalRobots[toAssign].AddJob(currentJobs);
                                 }
                             }
-                            // Removing Jobs that are assigned to a robot
+                            // Removing Jobs that are already assigned to a robot
                             AllJobs.Clear();
                         }
                     }
                 }
             });
 
+            // Thread does not end, but only get activated once there is an update in Cloud Firestore "User Orders" collection
             notifier.ListenerTask.Wait();
         }
 
+        /// <summary>
+        /// Add item to shipping truck
+        /// </summary>
+        /// <param name="toTruck"> Job that contains the order id and product information that will be loaded to the shipping truck </param>
         public static void AddToTruck(Jobs toTruck)
         {
             LoadedToTruck.Enqueue(toTruck);
         }
 
+        /// <summary>
+        /// Verify and update order status to Cloud Firestore to true if all of the products within that order is loaded to a shipping truck
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
         private async void ShippingVerificationV2(FirestoreDb database)
         {
             while (true)
@@ -516,6 +602,7 @@ namespace AmazoomDebug
                                     {
                                         partialOrders[completeOrder.OrderId]--;
                                     }
+                                    // decrement item count that is left for the corresponding order id
                                     else
                                     {
                                         partialOrders.Add(completeOrder.OrderId, completeOrder.Ordered.Count - 1);
@@ -528,35 +615,48 @@ namespace AmazoomDebug
                     }
                 }
 
+                // For each partial orders, check to see if an order is complete, if yes, change the shipping status to true and update on to Cloud Firestore
                 foreach (var pair in partialOrders)
                 {
                     for (int i = 0; i < LocalOrders.Count; i++)
                     {
                         int emptyCount = 0;
 
+                        // For a complete order, the dictionary containing the order id and item count; the item count should be zero indicating that the order is complete
                         if (pair.Key == LocalOrders[i].OrderId && pair.Value == emptyCount)
                         {
                             DocumentReference updateOrderStatus = database.Collection("User Orders").Document(LocalOrders[i].OrderId);
                             Dictionary<string, Object> toggleOrderStatus = new Dictionary<string, Object>();
                             toggleOrderStatus.Add("isShipped", true);
 
+                            // Sync to Cloud Firestore
                             await updateOrderStatus.UpdateAsync(toggleOrderStatus);
+
                             LocalOrders.RemoveAt(i);
 
                             break;
                         }
                     }
                 }
+                // Releaseing resources for this thread. This thread does not need to update instantly
+                Thread.Sleep(2000);
             }
         }
 
+        /// <summary>
+        /// Regulates the docking area of the warehouse. Only allow one truck to enter the docking area at a time
+        /// For invertory trucks, check and create restocking orders for the corresponding robots in the corresponding columns
+        /// The restock is still randomly distributed
+        /// </summary>
         private void LoadingToTruck()
         {
             while (true)
             {
+                // Allowing a new truck (thread) to enter the docking area
                 dockLocking.Release();
                 Console.WriteLine("Warehouse releasing dock");
 
+                // Check for restocking and inventory trucks
                 foreach(var invTruck in operationalInvTrucks)
                 {
                     if (invTruck.IsReady)
@@ -568,7 +668,10 @@ namespace AmazoomDebug
                             {
                                 lock (toggleWarehouseSpaceLock)
                                 {
+                                    // Updating empty shelves in the warehouse
                                     isOccupied.Add(isEmpty[0]);
+
+                                    // Creating a new restocking job with any available shelf unit. This will allow for a random restocking of product
                                     Jobs restock = new Jobs(restockJob, null, true, false, null, isEmpty[0]);
 
                                     isEmpty.RemoveAt(0);
@@ -581,26 +684,33 @@ namespace AmazoomDebug
                             {
                                 if (currentJobs.Restock)
                                 {
+                                    // assigning a restocking job to the corresponding robot 
                                     int toAssign = (currentJobs.RestockCoord.Column) - 1;
                                     operationalRobots[toAssign].AddJob(currentJobs);
                                 }
                             }
-                            AllJobs.Clear();
+                            AllJobs.Clear();    // clear jobs that have already been assigned to a robot
                         }
                     }
                 }
+                // For inventory truck
                 createRestockingJob.Release();
 
+                // Wait for the current truck to leave the docking area first before signalling another truck in the waiting area that it can be docked
                 Console.WriteLine("Stuck waiting for release");
                 waitDocking.Wait();
                 Console.WriteLine("Warehouse waiting for truck to release");
              }
         }
 
+        /// <summary>
+        /// Background listener that only gets activated once there is a change in the "All product" collection on Cloud Firestore and if the product has "inStock" of less than 60
+        /// </summary>
+        /// <param name="database"> Firestore database instance </param>
         private void RestockingVerification(FirestoreDb database)
         {
-            // setting low stock to be 10 and get an aleart for restocking prompt
-            Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 75);
+            // setting low stock to be 60 (for the purpose of the demo) and get an aleart for restocking prompt
+            Query checkStock = database.Collection("All products").WhereLessThanOrEqualTo("inStock", 60);
 
             FirestoreChangeListener lowStockAlert = checkStock.Listen(async alert =>
             {
@@ -616,18 +726,23 @@ namespace AmazoomDebug
                     {
                         if(allProd.ProductID.Equals(currentStock.Id))
                         {
-
+                            // loading restocking items to an available inventory truck by the difference in the amount of stock remaining and the automatic restock setting "admin restock"
                             for (int i = 0; i < Math.Abs(quantity-inStock); i++)
                             {
                                 RestockItem.Enqueue(allProd);
                                 Console.WriteLine("Restock confirmed");
                             }
 
-                            Dictionary<string, Object> updateStock = new Dictionary<string, object>();
-                            updateStock.Add("inStock", quantity);
+                            // new dictionary for updating to Cloud Firestore
+                            Dictionary<string, Object> updateStock = new Dictionary<string, object>
+                            {
+                                { "inStock", quantity }
+                            };
 
                             DocumentReference update = database.Collection("All products").Document(currentStock.Id);
 
+                            // Updating the stock of the product to Cloud Firestore. This allows for user to order the same product even though the robot havent restocked the product back to a shelf yet
+                            // This is made possible because the robot prioritizes restocking in addition to finding the shortest path
                             await update.UpdateAsync(updateStock);
 
                             break;
@@ -635,17 +750,8 @@ namespace AmazoomDebug
                     }
                 }
             });
-
+            // Thread does not end, but only get activated once there is an update in Cloud Firestore "All products" collection with "inStock" of less than 60
             lowStockAlert.ListenerTask.Wait();
         }
     }
 }
-
-
-// add another variable on firebase "restock" to work with "inStock"
-
-// step1: "inStock" is used by the user/clients +- tarm add to cart and "restock" will reduce once order is already placed
-// step2: "restock" listen for lower than 75
-// step3: actual restock is going to happen +5 items. Wait for robot to restock at self before increment +5
-// step4: +1 when robot restock
-// step5: 

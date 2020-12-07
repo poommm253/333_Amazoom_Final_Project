@@ -1,8 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace AmazoomDebug
 {
+    /// <summary>
+    /// Products Class contains information of each individual products
+    /// It contains the product's name, id, a list of location within the warehose, weight, volume, stock, and price
+    /// </summary>
     class Products
     {
         public string ProductName { get; set; }
@@ -12,7 +15,6 @@ namespace AmazoomDebug
         public double Volume { get; set; }
         public int InStock { get; set; }
         public double Price { get; set; }
-
 
         public Products(string name, string id, List<Coordinate> pos, double weight, double volume, int inStock, double price)
         {
@@ -35,6 +37,10 @@ namespace AmazoomDebug
             Price = price;
         }
 
+        /// <summary>
+        /// Convert the list of coordinates containing all the locations of this specific product inside the warehouse into a list of string
+        /// </summary>
+        /// <returns>List of string of coordinates formatted as "row column shelf rightleft"</returns>
         public List<string> CoordToArray()
         {
             List<string> toArray = new List<string>();
@@ -48,23 +54,5 @@ namespace AmazoomDebug
 
             return toArray;
         }
-
-        /*public List<Dictionary<string, int>> CoordToArray()
-        {
-            List<Dictionary<string, int>> toArray = new List<Dictionary<string, int>>();
-
-            foreach (var coord in Location)
-            {
-                Dictionary<string, int> temp = new Dictionary<string, int>();
-                temp["Row"] = coord.Row;
-                temp["Column"] = coord.Column;
-                temp["Shelf"] = coord.Shelf;
-
-                toArray.Add(temp);
-            }
-
-            return toArray;
-        }*/
-
     }
 }

@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Google.Cloud.Firestore;
-
-/// <summary>
+﻿/// <summary>
 /// You need to install Google.Cloud.Firestore NuGet Packages. Go to Project >> Manage NuGet Packages >> search for Google.Cloud.Firestore
+/// Main method for instantiating the Warehouse object and deploying the warehouse
 /// </summary>
 namespace AmazoomDebug
 {
@@ -15,8 +9,8 @@ namespace AmazoomDebug
         static void Main()
         {
             // initializes the warehouse
-            Warehouse testWarehouse = new Warehouse();
-            testWarehouse.Deploy();
+            Warehouse Amazoom1 = new Warehouse();
+            Amazoom1.Deploy();
         }
     }
 }

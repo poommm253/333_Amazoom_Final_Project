@@ -1,8 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace AmazoomDebug
 {
+    /// <summary>
+    /// Orders contain the orderId uniquely generated from Cloud Firestore, a list of Products Class containing all the products in that order,
+    /// the user id that corresponds to the order, and the shipping status that toggles to true when all products in the order has been shipped
+    /// </summary>
     class Orders
     {
         public string OrderId { get; set; }

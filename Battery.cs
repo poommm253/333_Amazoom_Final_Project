@@ -3,6 +3,10 @@ using System.Threading;
 
 namespace AmazoomDebug
 {
+    /// <summary>
+    /// unit = seconds
+    /// max usage of 60 seconds from full charge (for the purpose of this demo, it is kept to be at 60 seconds)
+    /// </summary>
     class Battery
     {
         // unit = seconds
@@ -15,14 +19,16 @@ namespace AmazoomDebug
             BatteryLevel = level;  
         }
 
-        // reporting battery level in 10% intervals; critical level = 10%
-        // max 60 sec of use before charging from full charge
-        // looses 10% of charge every 6 sec == 6000 ms
+        /// <summary>
+        /// reporting battery level in 10% intervals; critical battery level is 10% and must be recharged
+        /// max usage 60 seconds from full charge; equivalent to -10% every 6 steps the robot takes
+        /// </summary>
+        /// <returns>returns true if the battery is over 10% meaning the robot can be used. Otherwise return false</returns>
         public bool Usage()
         {
             if (BatteryLevel == 10)
             {
-                return false;    // doesnt allow usage once battery is 10%
+                return false;    // Doesn't allow usage once battery is 10%
             }
             else
             {
@@ -32,8 +38,11 @@ namespace AmazoomDebug
             return true;
         }
 
-        // reporting battery level when 100%, 75%, 50%, 25%, 10% (low battery need to charge)
-        // takes 6 sec to fully charge, therefore 5.4 seconds for 10% - 100%
+        /// <summary>
+        /// Charging the battery from the current battery level to full battery.
+        /// Charging time varies according to the current remaining battery level.
+        /// Charging rate is 16.666 meaning it takes 6 seconds to fully charge the battery
+        /// </summary>
         public void Charge()
         {
             double chargeTime = (100 - BatteryLevel)/(chargeRate);
